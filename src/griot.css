@@ -1,0 +1,353 @@
+/* ─── griot.css ───────────────────────────────────────────────────────────────
+   All styles for both editor and viewer.
+   Import once; scope is via .griot-editor and .griot-viewer.
+   CSS variables let the host app theme everything.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --griot-bg:            #060918;
+  --griot-surface:       rgba(255,255,255,0.03);
+  --griot-surface-hover: rgba(255,255,255,0.055);
+  --griot-border:        rgba(255,255,255,0.07);
+  --griot-border-focus:  rgba(99,102,241,0.5);
+  --griot-accent:        #6366f1;
+  --griot-accent-soft:   rgba(99,102,241,0.12);
+  --griot-accent-text:   #a5b4fc;
+  --griot-text:          #e2e8f0;
+  --griot-text-muted:    #64748b;
+  --griot-text-faint:    #334155;
+  --griot-code-bg:       rgba(0,0,0,0.45);
+  --griot-code-color:    #a5f3fc;
+  --griot-chip-event-bg: rgba(99,102,241,0.15);
+  --griot-chip-cite-bg:  rgba(34,197,94,0.10);
+  --griot-font-body:     system-ui, -apple-system, sans-serif;
+  --griot-font-mono:     'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  --griot-font-serif:    'Georgia', 'Times New Roman', serif;
+  --griot-radius:        8px;
+  --griot-radius-sm:     5px;
+  --griot-transition:    0.15s ease;
+}
+
+/* ── Shared base ───────────────────────────────────────────────────────────── */
+.griot-editor,
+.griot-viewer {
+  font-family: var(--griot-font-body);
+  color: var(--griot-text);
+  background: transparent;
+  line-height: 1.7;
+}
+
+/* ── Inline elements ────────────────────────────────────────────────────────── */
+.griot-editor strong, .griot-viewer strong { color: #f1f5f9; font-weight: 700; }
+.griot-editor em,     .griot-viewer em     { color: #94a3b8; }
+
+.griot-inline-code {
+  background: rgba(139,92,246,0.15);
+  border: 1px solid rgba(139,92,246,0.25);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: var(--griot-font-mono);
+  font-size: 0.875em;
+  color: #c4b5fd;
+}
+
+.griot-link {
+  color: #7dd3fc;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(125,211,252,0.3);
+  transition: border-color var(--griot-transition);
+}
+.griot-link:hover { border-bottom-color: #7dd3fc; }
+
+/* Chips */
+.griot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: var(--griot-radius-sm);
+  padding: 1px 8px;
+  font-family: var(--griot-font-body);
+  font-size: 0.85em;
+  cursor: pointer;
+  border: 1px solid;
+  vertical-align: middle;
+  transition: opacity var(--griot-transition);
+  line-height: 1.6;
+}
+.griot-chip:hover { opacity: 0.8; }
+.griot-chip--event {
+  background: var(--griot-chip-event-bg);
+  border-color: rgba(99,102,241,0.35);
+  color: var(--griot-accent-text);
+}
+.griot-chip--cite {
+  background: var(--griot-chip-cite-bg);
+  border-color: rgba(34,197,94,0.25);
+  color: #86efac;
+}
+.griot-chip__icon { font-size: 0.85em; }
+
+/* ── Viewer blocks ──────────────────────────────────────────────────────────── */
+.griot-viewer .griot-block { scroll-margin-top: 80px; }
+
+.griot-viewer .griot-paragraph {
+  color: var(--griot-text-muted);
+  margin: 0 0 14px;
+  font-size: 0.97em;
+}
+
+.griot-viewer .griot-heading { font-weight: 800; color: #f8fafc; }
+.griot-viewer .griot-heading--1 { font-family: var(--griot-font-serif); font-size: 1.95em; margin: 32px 0 10px; letter-spacing: -0.02em; line-height: 1.15; }
+.griot-viewer .griot-heading--2 { font-size: 1.4em;  margin: 24px 0 8px; letter-spacing: -0.01em; }
+.griot-viewer .griot-heading--3 { font-size: 0.85em; margin: 18px 0 6px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--griot-accent); font-weight: 700; }
+.griot-viewer .griot-heading--4 { font-size: 1.05em; margin: 14px 0 6px; color: #cbd5e1; }
+.griot-viewer .griot-heading--5 { font-size: 0.95em; margin: 12px 0 5px; color: #94a3b8; }
+.griot-viewer .griot-heading--6 { font-size: 0.85em; margin: 10px 0 4px; color: var(--griot-text-faint); text-transform: uppercase; }
+
+.griot-viewer .griot-blockquote {
+  border-left: 3px solid var(--griot-accent);
+  margin: 18px 0;
+  padding: 10px 18px;
+  background: var(--griot-accent-soft);
+  border-radius: 0 var(--griot-radius) var(--griot-radius) 0;
+  color: #94a3b8;
+  font-style: italic;
+  font-family: var(--griot-font-serif);
+  font-size: 1.05em;
+}
+
+.griot-viewer .griot-callout {
+  display: flex;
+  gap: 12px;
+  background: rgba(99,102,241,0.07);
+  border: 1px solid rgba(99,102,241,0.2);
+  border-radius: 10px;
+  padding: 13px 16px;
+  margin: 14px 0;
+}
+.griot-callout__icon { font-size: 1.3em; flex-shrink: 0; line-height: 1.4; }
+.griot-callout__body { color: var(--griot-text); line-height: 1.7; }
+
+.griot-viewer .griot-code {
+  background: var(--griot-code-bg);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin: 14px 0;
+  font-family: var(--griot-font-mono);
+  font-size: 0.85em;
+  color: var(--griot-code-color);
+  line-height: 1.75;
+  overflow-x: auto;
+}
+
+.griot-viewer .griot-divider {
+  border: none;
+  border-top: 1px solid var(--griot-border);
+  margin: 28px 0;
+}
+
+.griot-viewer .griot-image { margin: 18px 0; }
+.griot-viewer .griot-image img { max-width: 100%; border-radius: var(--griot-radius); display: block; }
+.griot-viewer .griot-image figcaption { font-size: 0.8em; color: var(--griot-text-faint); margin-top: 6px; text-align: center; }
+
+.griot-viewer .griot-timeline-ref {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(99,102,241,0.07);
+  border: 1px solid rgba(99,102,241,0.22);
+  border-radius: 10px;
+  padding: 12px 15px;
+  margin: 14px 0;
+  cursor: pointer;
+  transition: background var(--griot-transition);
+}
+.griot-viewer .griot-timeline-ref:hover { background: rgba(99,102,241,0.12); }
+.griot-timeline-ref__icon  { font-size: 1.5em; flex-shrink: 0; }
+.griot-timeline-ref__body  { flex: 1; }
+.griot-timeline-ref__title { font-weight: 600; color: var(--griot-accent-text); font-size: 0.95em; }
+.griot-timeline-ref__note  { font-size: 0.85em; color: var(--griot-text-faint); margin-top: 3px; }
+.griot-timeline-ref__arrow { font-size: 11px; color: var(--griot-text-faint); }
+
+.griot-viewer .griot-citation {
+  background: rgba(8,12,36,0.6);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-radius: 11px;
+  margin: 18px 0;
+  overflow: hidden;
+}
+.griot-citation__inner    { border-left: 3px solid var(--griot-accent); padding: 13px 16px; }
+.griot-citation__header   { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 11px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em; color: var(--griot-accent); margin-bottom: 5px; }
+.griot-citation__book-icon  { }
+.griot-citation__book-title { }
+.griot-citation__author   { color: var(--griot-text-faint); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.griot-citation__unit     { color: var(--griot-text-faint); font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 10px; }
+.griot-citation__quote    {
+  border-left: 2px solid rgba(99,102,241,0.3);
+  padding-left: 12px; margin: 0 0 10px;
+  color: #94a3b8; font-style: italic;
+  font-family: var(--griot-font-serif);
+  font-size: 0.95em; line-height: 1.75;
+}
+.griot-citation__note     { color: var(--griot-text); line-height: 1.7; font-size: 0.95em; }
+.griot-citation__preview  { padding: 7px 16px; border-top: 1px solid rgba(99,102,241,0.1); background: rgba(99,102,241,0.03); font-size: 11px; color: var(--griot-text-faint); line-height: 1.5; }
+.griot-citation__empty,
+.griot-citation__missing  { padding: 14px 16px; font-size: 13px; font-style: italic; color: var(--griot-text-faint); }
+
+/* Highlight animation */
+@keyframes griot-hl-pulse {
+  0%   { outline-color: rgba(99,102,241,0.8); background: rgba(99,102,241,0.1); }
+  70%  { outline-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.05); }
+  100% { outline-color: transparent; background: transparent; }
+}
+.griot-block--highlight {
+  border-radius: var(--griot-radius);
+  outline: 2px solid rgba(99,102,241,0.8);
+  outline-offset: 4px;
+  animation: griot-hl-pulse 2.2s ease forwards;
+}
+
+/* ── Editor blocks ──────────────────────────────────────────────────────────── */
+.griot-editor-block {
+  border: 1px solid var(--griot-border);
+  border-radius: var(--griot-radius);
+  background: var(--griot-surface);
+  margin-bottom: 6px;
+  transition: border-color var(--griot-transition), background var(--griot-transition);
+}
+.griot-editor-block.is-focused {
+  border-color: var(--griot-border-focus);
+  background: var(--griot-surface-hover);
+}
+
+.griot-editor-block__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--griot-border);
+  background: rgba(0,0,0,0.15);
+  border-radius: var(--griot-radius) var(--griot-radius) 0 0;
+  flex-wrap: wrap;
+}
+
+.griot-editor-block__type-sel,
+.griot-editor-block__lvl-sel {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--griot-border);
+  border-radius: var(--griot-radius-sm);
+  color: var(--griot-text-muted);
+  font-size: 10px;
+  padding: 3px 6px;
+  outline: none;
+  cursor: pointer;
+}
+
+.griot-editor-block__pick-btn {
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-radius: var(--griot-radius-sm);
+  color: var(--griot-accent-text);
+  font-size: 10px;
+  padding: 3px 9px;
+  cursor: pointer;
+  outline: none;
+}
+
+.griot-editor-block__actions {
+  display: flex;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.griot-editor-block__action-btn {
+  background: none;
+  border: 1px solid var(--griot-border);
+  border-radius: 4px;
+  color: var(--griot-text-faint);
+  font-size: 11px;
+  padding: 2px 7px;
+  cursor: pointer;
+  outline: none;
+  transition: color var(--griot-transition), border-color var(--griot-transition);
+}
+.griot-editor-block__action-btn:hover        { color: var(--griot-text); }
+.griot-editor-block__action-btn.is-disabled  { opacity: 0.3; pointer-events: none; }
+.griot-editor-block__action-btn.is-add       { color: var(--griot-accent); border-color: rgba(99,102,241,0.25); }
+.griot-editor-block__action-btn.is-delete    { color: #f87171; border-color: rgba(248,113,113,0.25); }
+
+.griot-editor-block__input {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  color: var(--griot-text);
+  font-size: 13px;
+  font-family: var(--griot-font-body);
+  line-height: 1.7;
+  outline: none;
+  resize: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 38px;
+}
+.griot-input--heading  { font-weight: 700; font-size: 16px; }
+.griot-input--code     { font-family: var(--griot-font-mono); font-size: 12px; white-space: pre; min-height: 80px; color: var(--griot-code-color); }
+.griot-input--blockquote { font-style: italic; color: #94a3b8; }
+
+/* Placeholder via data attribute */
+.griot-editor-block__input:empty::before {
+  content: attr(data-placeholder);
+  color: var(--griot-text-faint);
+  pointer-events: none;
+}
+
+/* Live preview strip */
+.griot-editor-block__preview {
+  padding: 6px 14px 10px;
+  border-top: 1px solid rgba(99,102,241,0.1);
+  font-size: 12px;
+  color: #64748b;
+  background: rgba(99,102,241,0.02);
+  border-radius: 0 0 var(--griot-radius) var(--griot-radius);
+  line-height: 1.6;
+}
+.griot-editor-block__preview:empty { display: none; }
+
+/* Special block UI */
+.griot-editor-block__special { padding: 10px 12px; }
+
+.griot-editor-block__meta-input {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--griot-border);
+  border-radius: var(--griot-radius-sm);
+  color: var(--griot-text);
+  font-size: 12px;
+  padding: 5px 8px;
+  outline: none;
+  font-family: var(--griot-font-body);
+  box-sizing: border-box;
+  width: 100%;
+  transition: border-color var(--griot-transition);
+}
+.griot-editor-block__meta-input:focus { border-color: var(--griot-border-focus); }
+.griot-editor-block__meta-textarea { resize: vertical; min-height: 52px; display: block; }
+
+.griot-editor-block__img-preview {
+  max-width: 100%;
+  max-height: 120px;
+  border-radius: 6px;
+  display: block;
+  margin-bottom: 8px;
+  opacity: 0.85;
+}
+
+.griot-editor-block__citation-label {
+  font-size: 11px;
+  color: var(--griot-accent);
+  margin-bottom: 7px;
+  font-weight: 600;
+}
