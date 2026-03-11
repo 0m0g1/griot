@@ -1,58 +1,33 @@
 // ─── History.js ───────────────────────────────────────────────────────────────
-// Linear undo/redo stack.
-// Works with immutable document snapshots — just push the whole doc each time.
+// Linear undo/redo stack. Stores immutable document snapshots.
 // ─────────────────────────────────────────────────────────────────────────────
 
+const MAX_HISTORY = 200;
+
 export class History {
-  constructor(initialDoc, { maxDepth = 100 } = {}) {
-    this._stack    = [initialDoc];
-    this._cursor   = 0;
-    this._maxDepth = maxDepth;
+  constructor(initialDoc) {
+    this._stack  = initialDoc ? [initialDoc] : [];
+    this._cursor = this._stack.length - 1;
   }
 
-  // Current document
-  get current() { return this._stack[this._cursor]; }
+  get current() { return this._stack[this._cursor] ?? null; }
+  canUndo()     { return this._cursor > 0; }
+  canRedo()     { return this._cursor < this._stack.length - 1; }
 
-  get canUndo() { return this._cursor > 0; }
-  get canRedo() { return this._cursor < this._stack.length - 1; }
-
-  // Push a new state (truncates any redo branch)
+  /** Push a new snapshot, discarding any redo future. */
   push(doc) {
-    // Truncate future if we're not at the top
     this._stack = this._stack.slice(0, this._cursor + 1);
     this._stack.push(doc);
-
-    // Enforce max depth
-    if (this._stack.length > this._maxDepth) {
-      this._stack = this._stack.slice(this._stack.length - this._maxDepth);
-    }
-
+    if (this._stack.length > MAX_HISTORY) this._stack.shift();
     this._cursor = this._stack.length - 1;
-    return this;
   }
 
-  undo() {
-    if (!this.canUndo) return this.current;
-    this._cursor--;
-    return this.current;
-  }
-
-  redo() {
-    if (!this.canRedo) return this.current;
-    this._cursor++;
-    return this.current;
-  }
-
-  // Replace current snapshot without branching (for transient changes
-  // like typing individual characters — debounce the push externally)
+  /** Replace the current snapshot in-place (no new undo point). */
   replace(doc) {
-    this._stack[this._cursor] = doc;
-    return this;
+    if (this._cursor >= 0) this._stack[this._cursor] = doc;
+    else this.push(doc);
   }
 
-  clear(doc) {
-    this._stack  = [doc];
-    this._cursor = 0;
-    return this;
-  }
+  undo() { if (this.canUndo()) this._cursor--; return this.current; }
+  redo() { if (this.canRedo()) this._cursor++; return this.current; }
 }

@@ -1,169 +1,155 @@
-// ─── Keyboard.js ──────────────────────────────────────────────────────────────
-// All keyboard behaviour for the block editor.
-// Pure logic — receives the current doc + focused block ID, returns events
-// the Editor class acts on.
-//
-// Exported: attachKeyboardHandler(el, callbacks)
-//   Attaches a keydown listener to a contenteditable element for one block.
-//   Calls back into Editor which owns the document state.
+// ─── Keyboard.js ─────────────────────────────────────────────────────────────
+// Keyboard event handling for contenteditable editor blocks.
+// Also exports cursor position helpers shared by Editor and FormatToolbar.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * @param {HTMLElement}  el         The contenteditable element
- * @param {object}       callbacks
- *   onEnter(blockId, offset)       — Enter pressed: split at cursor offset
- *   onBackspaceAtStart(blockId)    — Backspace at offset 0: merge with prev
- *   onDeleteAtEnd(blockId)         — Delete at end: merge next into this
- *   onTab(blockId, shift)          — Tab / Shift+Tab
- *   onArrowUp(blockId)             — Arrow up at first line → move focus to prev block
- *   onArrowDown(blockId)           — Arrow down at last line → move focus to next block
- *   onUndo()                       — Ctrl/Cmd+Z
- *   onRedo()                       — Ctrl/Cmd+Shift+Z or Ctrl+Y
+ * Attach all editor keyboard shortcuts to a contenteditable element.
+ *
+ * Callbacks:
+ *   onEnter(id, offset)       — Enter (no shift)
+ *   onBackspaceAtStart(id)    — Backspace at offset 0 with no selection
+ *   onDeleteAtEnd(id)         — Delete at end with no selection
+ *   onTab(id, isShift)        — Tab / Shift+Tab
+ *   onArrowUp(id)             — ↑ on first visual line
+ *   onArrowDown(id)           — ↓ on last visual line
+ *   onUndo()                  — Ctrl/Cmd+Z
+ *   onRedo()                  — Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z
+ *   onFormatKey(key)          — Ctrl/Cmd+B/I/U
  */
-export function attachKeyboardHandler(el, blockId, callbacks) {
-  el.addEventListener('keydown', (e) => {
-    const {
-      onEnter, onBackspaceAtStart, onDeleteAtEnd,
-      onTab, onArrowUp, onArrowDown, onUndo, onRedo,
-    } = callbacks;
+export function attachKeyboardHandler(el, blockId, callbacks = {}) {
+  const {
+    onEnter, onBackspaceAtStart, onDeleteAtEnd,
+    onTab, onArrowUp, onArrowDown,
+    onUndo, onRedo, onFormatKey,
+  } = callbacks;
 
+  el.addEventListener('keydown', (e) => {
     const ctrl = e.ctrlKey || e.metaKey;
 
-    // ── Undo / Redo ──────────────────────────────────────────────
-    if (ctrl && e.key === 'z' && !e.shiftKey) {
+    // ── Undo / Redo ───────────────────────────────────────────────────────────
+    if (ctrl && e.key === 'z' && !e.shiftKey) { e.preventDefault(); onUndo?.();  return; }
+    if (ctrl && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); onRedo?.(); return; }
+
+    // ── Inline format shortcuts ───────────────────────────────────────────────
+    if (ctrl && ['b', 'i', 'u'].includes(e.key.toLowerCase())) {
       e.preventDefault();
-      onUndo?.();
-      return;
-    }
-    if ((ctrl && e.key === 'z' && e.shiftKey) || (ctrl && e.key === 'y')) {
-      e.preventDefault();
-      onRedo?.();
+      onFormatKey?.(e.key.toLowerCase());
       return;
     }
 
-    // ── Enter → split block ──────────────────────────────────────
+    // ── Enter ─────────────────────────────────────────────────────────────────
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       onEnter?.(blockId, getCursorOffset(el));
       return;
     }
 
-    // ── Backspace at start → merge with previous ─────────────────
-    if (e.key === 'Backspace' && getCursorOffset(el) === 0 && !hasSelection()) {
+    // ── Backspace at start ────────────────────────────────────────────────────
+    if (e.key === 'Backspace' && getCursorOffset(el) === 0 && selLen(el) === 0) {
       e.preventDefault();
       onBackspaceAtStart?.(blockId);
       return;
     }
 
-    // ── Delete at end → merge next into this ─────────────────────
-    if (e.key === 'Delete' && getCursorOffset(el) === el.textContent.length && !hasSelection()) {
+    // ── Delete at end ─────────────────────────────────────────────────────────
+    if (e.key === 'Delete' && isAtEnd(el) && selLen(el) === 0) {
       e.preventDefault();
       onDeleteAtEnd?.(blockId);
       return;
     }
 
-    // ── Tab ───────────────────────────────────────────────────────
+    // ── Tab ───────────────────────────────────────────────────────────────────
     if (e.key === 'Tab') {
       e.preventDefault();
       onTab?.(blockId, e.shiftKey);
       return;
     }
 
-    // ── Arrow navigation across blocks ───────────────────────────
-    if (e.key === 'ArrowUp' && isAtFirstLine(el)) {
-      e.preventDefault();
-      onArrowUp?.(blockId);
-      return;
-    }
-    if (e.key === 'ArrowDown' && isAtLastLine(el)) {
-      e.preventDefault();
-      onArrowDown?.(blockId);
-      return;
-    }
+    // ── Arrow navigation between blocks ──────────────────────────────────────
+    if (e.key === 'ArrowUp'   && isOnFirstLine(el)) { e.preventDefault(); onArrowUp?.(blockId); }
+    if (e.key === 'ArrowDown' && isOnLastLine(el))  { e.preventDefault(); onArrowDown?.(blockId); }
   });
 }
 
-// ─── Cursor helpers ───────────────────────────────────────────────────────────
+// ── Cursor offset helpers ─────────────────────────────────────────────────────
 
-/** Returns the character offset of the caret within el.textContent */
+/** Character offset of the caret within `el`. */
 export function getCursorOffset(el) {
   const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return 0;
-  const range = sel.getRangeAt(0).cloneRange();
-  range.selectNodeContents(el);
-  range.setEnd(sel.getRangeAt(0).endContainer, sel.getRangeAt(0).endOffset);
-  return range.toString().length;
+  if (!sel?.rangeCount) return 0;
+  const r   = sel.getRangeAt(0);
+  const pre = r.cloneRange();
+  pre.selectNodeContents(el);
+  pre.setEnd(r.startContainer, r.startOffset);
+  return pre.toString().length;
 }
 
-/** Place the caret at a specific character offset within el */
+/** { start, end } character offsets of the current selection within `el`. */
+export function getSelectionOffsets(el) {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount) return { start: 0, end: 0 };
+  const r   = sel.getRangeAt(0);
+  const pre = r.cloneRange();
+  pre.selectNodeContents(el);
+  pre.setEnd(r.startContainer, r.startOffset);
+  const start = pre.toString().length;
+  const end   = start + r.toString().length;
+  return { start, end };
+}
+
+/** Move the caret to `offset` characters from the start of `el`. */
 export function setCursorOffset(el, offset) {
-  const range = document.createRange();
   const sel   = window.getSelection();
-  if (!sel) return;
+  const range = document.createRange();
+  let rem = offset, found = false;
 
-  let remaining = offset;
-  let found = false;
-
-  function walk(node) {
+  (function walk(node) {
     if (found) return;
     if (node.nodeType === Node.TEXT_NODE) {
-      if (remaining <= node.textContent.length) {
-        range.setStart(node, remaining);
-        range.setEnd(node, remaining);
+      if (rem <= node.length) {
+        range.setStart(node, rem);
+        range.setEnd(node, rem);
         found = true;
       } else {
-        remaining -= node.textContent.length;
+        rem -= node.length;
       }
     } else {
-      for (const child of node.childNodes) walk(child);
+      node.childNodes.forEach(walk);
     }
-  }
+  })(el);
 
-  walk(el);
-
-  if (!found) {
-    // Clamp to end
-    range.selectNodeContents(el);
-    range.collapse(false);
-  }
-
+  if (!found) { range.selectNodeContents(el); range.collapse(false); }
   sel.removeAllRanges();
   sel.addRange(range);
 }
 
-/** Focus el and place caret at end */
-export function focusAtEnd(el) {
-  el.focus();
-  setCursorOffset(el, el.textContent.length);
+export function focusAtEnd(el)   { el.focus(); setCursorOffset(el, el.textContent?.length ?? 0); }
+export function focusAtStart(el) { el.focus(); setCursorOffset(el, 0); }
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+function selLen(el) {
+  try { return window.getSelection()?.getRangeAt(0)?.toString().length ?? 0; }
+  catch { return 0; }
 }
 
-/** Focus el and place caret at start */
-export function focusAtStart(el) {
-  el.focus();
-  setCursorOffset(el, 0);
+function isAtEnd(el) {
+  return getCursorOffset(el) >= (el.textContent?.length ?? 0);
 }
 
-// ─── Line detection ───────────────────────────────────────────────────────────
-function hasSelection() {
-  const sel = window.getSelection();
-  return sel && sel.type === 'Range';
+function isOnFirstLine(el) {
+  try {
+    const sel = window.getSelection();
+    if (!sel?.rangeCount) return true;
+    return sel.getRangeAt(0).getBoundingClientRect().top < el.getBoundingClientRect().top + 10;
+  } catch { return true; }
 }
 
-function isAtFirstLine(el) {
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return false;
-  const range = sel.getRangeAt(0);
-  const rect  = range.getBoundingClientRect();
-  const elRect = el.getBoundingClientRect();
-  // Within 1.5x line-height from top
-  return Math.abs(rect.top - elRect.top) < 30;
-}
-
-function isAtLastLine(el) {
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return false;
-  const range = sel.getRangeAt(0);
-  const rect  = range.getBoundingClientRect();
-  const elRect = el.getBoundingClientRect();
-  return Math.abs(rect.bottom - elRect.bottom) < 30;
+function isOnLastLine(el) {
+  try {
+    const sel = window.getSelection();
+    if (!sel?.rangeCount) return true;
+    return sel.getRangeAt(0).getBoundingClientRect().bottom > el.getBoundingClientRect().bottom - 10;
+  } catch { return true; }
 }

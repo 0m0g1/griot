@@ -1,63 +1,60 @@
 // ─── Block.js ─────────────────────────────────────────────────────────────────
-// Pure data. No DOM, no rendering. A block is a plain serialisable object.
-//
-// Shape:
-//   { id, type, text?, meta:{} }
-//
-// meta holds type-specific fields:
-//   heading  → meta.level (1-6)
-//   callout  → meta.icon
-//   code     → meta.language
-//   image    → meta.src, meta.alt, meta.caption
-//   divider  → (no extra fields)
-//   timeline_ref  → meta.eventId, meta.eventTitle
-//   book_citation → meta.bookId, meta.unitId, meta.quote, meta.note
+// Pure block primitives. No schema dependency, no document awareness.
 // ─────────────────────────────────────────────────────────────────────────────
 
 let _seq = 0;
-const uid = (prefix = 'b') => `${prefix}_${Date.now()}_${(++_seq).toString(36)}`;
+const uid = () => `b_${Date.now().toString(36)}_${(++_seq).toString(36)}`;
 
-// TEXT_TYPES — block types that carry a user-editable `text` field
+/** Block types that carry a text field (editable as plain text). */
 export const TEXT_TYPES = new Set([
-  'paragraph', 'heading', 'blockquote', 'callout', 'code',
+  'paragraph', 'heading', 'blockquote',
+  'callout', 'callout_warning', 'callout_tip', 'callout_danger',
+  'code', 'list_ul', 'list_ol',
 ]);
 
-// ALL_TYPES — exhaustive list for validation
-export const ALL_TYPES = new Set([
-  'paragraph', 'heading', 'blockquote', 'callout', 'code',
-  'divider', 'image', 'timeline_ref', 'book_citation',
-]);
+/** All known block types (informational; canonical list is BlockSchema). */
+export const ALL_TYPES = [
+  'paragraph', 'heading', 'blockquote',
+  'callout', 'callout_warning', 'callout_tip', 'callout_danger',
+  'code', 'list_ul', 'list_ol', 'table',
+  'divider', 'image', 'video', 'timeline_ref', 'book_citation',
+];
 
-// ─── Factory ──────────────────────────────────────────────────────────────────
+/**
+ * Create a new block with a fresh unique id.
+ * @param {string} type
+ * @param {{ id?, text?, meta? }} [overrides]
+ */
 export function createBlock(type = 'paragraph', overrides = {}) {
-  if (!ALL_TYPES.has(type)) {
-    console.warn(`[Griot] Unknown block type "${type}", defaulting to paragraph`);
-    type = 'paragraph';
-  }
   return {
-    id:   uid('b'),
+    id:   overrides.id   ?? uid(),
     type,
-    text: TEXT_TYPES.has(type) ? '' : null,
-    meta: {},
-    ...overrides,
+    text: TEXT_TYPES.has(type) ? (overrides.text ?? '') : null,
+    meta: overrides.meta ?? {},
   };
 }
 
-export function cloneBlock(block) {
-  return {
-    ...block,
-    id:   uid('b'),
-    meta: { ...block.meta },
-  };
+/** Deep-clone a block. Pass newId=false to keep the same id. */
+export function cloneBlock(block, newId = true) {
+  return { ...block, id: newId ? uid() : block.id, meta: { ...block.meta } };
 }
 
-// ─── Predicates ───────────────────────────────────────────────────────────────
-export const isTextBlock  = (b) => TEXT_TYPES.has(b?.type);
-export const isValidBlock = (b) => b && typeof b.id === 'string' && ALL_TYPES.has(b.type);
+/** True if this block type stores a text string. */
+export function isTextBlock(block) {
+  return TEXT_TYPES.has(block?.type);
+}
 
-// ─── Anchor ID (stable DOM id for deep-linking) ───────────────────────────────
-export const anchorId     = (blockId) => `griot-${blockId}`;
-export const scrollToBlock = (blockId, behavior = 'smooth') => {
-  document.getElementById(anchorId(blockId))
-    ?.scrollIntoView({ behavior, block: 'center' });
-};
+/** Minimal structural validity check. */
+export function isValidBlock(block) {
+  return Boolean(block && typeof block.id === 'string' && typeof block.type === 'string');
+}
+
+/** DOM id attribute used to anchor/locate a block element. */
+export function anchorId(blockId) {
+  return `griot-block-${blockId}`;
+}
+
+/** Smooth-scroll (or jump) to a block's DOM element. */
+export function scrollToBlock(blockId, behavior = 'smooth') {
+  document.getElementById(anchorId(blockId))?.scrollIntoView({ behavior, block: 'center' });
+}

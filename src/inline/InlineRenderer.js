@@ -2,116 +2,133 @@
 // Renders inline token arrays to either:
 //   a) A DocumentFragment (DOM nodes) — used by Viewer and Editor live preview
 //   b) An HTML string                 — used for SSR / export
-//
-// Callbacks:
-//   onEventClick(eventId)  — called when an [[event:]] chip is clicked
-//   onCiteClick(blockId)   — called when a [[cite:]] chip is clicked
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { tokenizeInline, TOKEN } from './InlineLexer.js';
 
-// ─── DOM rendering ────────────────────────────────────────────────────────────
+// ── DOM rendering ─────────────────────────────────────────────────────────────
+
 export function renderInlineToDOM(text = '', { onEventClick, onCiteClick } = {}) {
   const frag = document.createDocumentFragment();
-  const tokens = tokenizeInline(text);
-
-  for (const t of tokens) {
-    let node;
-
-    switch (t.type) {
-      case TOKEN.TEXT:
-        node = document.createTextNode(t.text);
-        break;
-
-      case TOKEN.BOLD:
-        node = document.createElement('strong');
-        node.textContent = t.text;
-        break;
-
-      case TOKEN.ITALIC:
-        node = document.createElement('em');
-        node.textContent = t.text;
-        break;
-
-      case TOKEN.CODE: {
-        node = document.createElement('code');
-        node.className = 'griot-inline-code';
-        node.textContent = t.text;
-        break;
-      }
-
-      case TOKEN.LINK: {
-        node = document.createElement('a');
-        node.href   = t.href;
-        node.target = '_blank';
-        node.rel    = 'noopener noreferrer';
-        node.className = 'griot-link';
-        node.textContent = t.text;
-        break;
-      }
-
-      case TOKEN.EVENT_REF: {
-        node = document.createElement('button');
-        node.type      = 'button';
-        node.className = 'griot-chip griot-chip--event';
-        node.dataset.eventId = t.eventId;
-        node.innerHTML = `<span class="griot-chip__icon">⏱</span><span class="griot-chip__label">${escHtml(t.label)}</span>`;
-        if (onEventClick) {
-          node.addEventListener('click', (e) => {
-            e.stopPropagation();
-            onEventClick(t.eventId);
-          });
-        }
-        break;
-      }
-
-      case TOKEN.CITE_REF: {
-        node = document.createElement('button');
-        node.type      = 'button';
-        node.className = 'griot-chip griot-chip--cite';
-        node.dataset.blockId = t.blockId;
-        node.innerHTML = `<span class="griot-chip__icon">📖</span><span class="griot-chip__label">${escHtml(t.label)}</span>`;
-        if (onCiteClick) {
-          node.addEventListener('click', (e) => {
-            e.stopPropagation();
-            onCiteClick(t.blockId);
-          });
-        }
-        break;
-      }
-
-      default:
-        node = document.createTextNode(t.text ?? '');
-    }
-
-    frag.appendChild(node);
+  for (const t of tokenizeInline(text)) {
+    frag.appendChild(_toNode(t, { onEventClick, onCiteClick }));
   }
-
   return frag;
 }
 
-// ─── HTML string rendering ────────────────────────────────────────────────────
-export function renderInlineToHTML(text = '') {
-  const tokens = tokenizeInline(text);
-  let html = '';
+function _toNode(t, opts) {
+  switch (t.type) {
 
-  for (const t of tokens) {
-    switch (t.type) {
-      case TOKEN.TEXT:      html += escHtml(t.text);                                                   break;
-      case TOKEN.BOLD:      html += `<strong>${escHtml(t.text)}</strong>`;                             break;
-      case TOKEN.ITALIC:    html += `<em>${escHtml(t.text)}</em>`;                                     break;
-      case TOKEN.CODE:      html += `<code class="griot-inline-code">${escHtml(t.text)}</code>`;       break;
-      case TOKEN.LINK:      html += `<a class="griot-link" href="${escAttr(t.href)}" target="_blank" rel="noopener noreferrer">${escHtml(t.text)}</a>`; break;
-      case TOKEN.EVENT_REF: html += `<button type="button" class="griot-chip griot-chip--event" data-event-id="${escAttr(t.eventId)}"><span class="griot-chip__icon">⏱</span><span class="griot-chip__label">${escHtml(t.label)}</span></button>`; break;
-      case TOKEN.CITE_REF:  html += `<button type="button" class="griot-chip griot-chip--cite"  data-block-id="${escAttr(t.blockId)}"><span class="griot-chip__icon">📖</span><span class="griot-chip__label">${escHtml(t.label)}</span></button>`;  break;
-      default:              html += escHtml(t.text ?? '');
+    case TOKEN.TEXT:
+      return document.createTextNode(t.text);
+
+    case TOKEN.BOLD: {
+      const el = document.createElement('strong');
+      el.textContent = t.text;
+      return el;
     }
-  }
+    case TOKEN.ITALIC: {
+      const el = document.createElement('em');
+      el.textContent = t.text;
+      return el;
+    }
+    case TOKEN.UNDERLINE: {
+      const el = document.createElement('u');
+      el.className = 'griot-underline';
+      el.textContent = t.text;
+      return el;
+    }
+    case TOKEN.STRIKE: {
+      const el = document.createElement('s');
+      el.className = 'griot-strike';
+      el.textContent = t.text;
+      return el;
+    }
+    case TOKEN.HIGHLIGHT: {
+      const el = document.createElement('mark');
+      el.className = 'griot-highlight';
+      el.textContent = t.text;
+      return el;
+    }
+    case TOKEN.COLOR_MARK: {
+      const el = document.createElement('span');
+      el.className  = 'griot-color-mark';
+      el.style.color = t.color;
+      el.textContent = t.text;
+      return el;
+    }
+    case TOKEN.CODE: {
+      const el = document.createElement('code');
+      el.className = 'griot-inline-code';
+      el.textContent = t.code;
+      return el;
+    }
+    case TOKEN.IMAGE: {
+      const el = document.createElement('img');
+      el.src = t.src;
+      el.alt = t.alt ?? '';
+      el.className = 'griot-inline-img';
+      return el;
+    }
+    case TOKEN.LINK: {
+      const el = document.createElement('a');
+      el.href      = t.href;
+      el.target    = '_blank';
+      el.rel       = 'noopener noreferrer';
+      el.className = 'griot-link';
+      el.textContent = t.label;
+      return el;
+    }
+    case TOKEN.EVENT_REF: {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'griot-chip griot-chip--event';
+      el.dataset.eventId = t.eventId;
+      el.innerHTML = `<span class="griot-chip__icon">⏱</span><span class="griot-chip__label">${escHtml(t.label)}</span>`;
+      if (opts.onEventClick) el.addEventListener('click', (e) => { e.stopPropagation(); opts.onEventClick(t.eventId); });
+      return el;
+    }
+    case TOKEN.CITE_REF: {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'griot-chip griot-chip--cite';
+      el.dataset.blockId = t.blockId;
+      el.innerHTML = `<span class="griot-chip__icon">📖</span><span class="griot-chip__label">${escHtml(t.label)}</span>`;
+      if (opts.onCiteClick) el.addEventListener('click', (e) => { e.stopPropagation(); opts.onCiteClick(t.blockId); });
+      return el;
+    }
 
-  return html;
+    default:
+      return document.createTextNode(t.text ?? '');
+  }
 }
 
-// ─── Escape helpers ───────────────────────────────────────────────────────────
+// ── HTML string rendering ─────────────────────────────────────────────────────
+
+export function renderInlineToHTML(text = '') {
+  return tokenizeInline(text).map(_toHTML).join('');
+}
+
+function _toHTML(t) {
+  switch (t.type) {
+    case TOKEN.TEXT:       return escHtml(t.text);
+    case TOKEN.BOLD:       return `<strong>${escHtml(t.text)}</strong>`;
+    case TOKEN.ITALIC:     return `<em>${escHtml(t.text)}</em>`;
+    case TOKEN.UNDERLINE:  return `<u class="griot-underline">${escHtml(t.text)}</u>`;
+    case TOKEN.STRIKE:     return `<s class="griot-strike">${escHtml(t.text)}</s>`;
+    case TOKEN.HIGHLIGHT:  return `<mark class="griot-highlight">${escHtml(t.text)}</mark>`;
+    case TOKEN.COLOR_MARK: return `<span class="griot-color-mark" style="color:${escAttr(t.color)}">${escHtml(t.text)}</span>`;
+    case TOKEN.CODE:       return `<code class="griot-inline-code">${escHtml(t.code)}</code>`;
+    case TOKEN.IMAGE:      return `<img class="griot-inline-img" src="${escAttr(t.src)}" alt="${escAttr(t.alt ?? '')}">`;
+    case TOKEN.LINK:       return `<a class="griot-link" href="${escAttr(t.href)}" target="_blank" rel="noopener noreferrer">${escHtml(t.label)}</a>`;
+    case TOKEN.EVENT_REF:  return `<button type="button" class="griot-chip griot-chip--event" data-event-id="${escAttr(t.eventId)}"><span class="griot-chip__icon">⏱</span><span class="griot-chip__label">${escHtml(t.label)}</span></button>`;
+    case TOKEN.CITE_REF:   return `<button type="button" class="griot-chip griot-chip--cite" data-block-id="${escAttr(t.blockId)}"><span class="griot-chip__icon">📖</span><span class="griot-chip__label">${escHtml(t.label)}</span></button>`;
+    default:               return escHtml(t.text ?? '');
+  }
+}
+
+// ── Escape helpers ────────────────────────────────────────────────────────────
+
 export function escHtml(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -122,7 +139,5 @@ export function escHtml(s) {
 }
 
 export function escAttr(s) {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;');
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 }
