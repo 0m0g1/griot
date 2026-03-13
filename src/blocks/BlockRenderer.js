@@ -1,46 +1,48 @@
 // ─── BlockRenderer.js ─────────────────────────────────────────────────────────
-// Renders a single block to a DOM element.
-// Used by both Viewer (read-only) and Editor (preview layer).
+// Renders a single block → DOM element.
+// Used by Viewer (read-only) and Editor preview layer.
 //
 // Options:
-//   books         — array of parsed book objects (for book_citation)
-//   onEventClick  — (eventId) => void
-//   onCiteClick   — (blockId) => void
-//   editable      — if true, skips event listeners (Editor manages them)
+//   books        — array of book objects
+//   onEventClick — (eventId) => void
+//   onCiteClick  — (blockId) => void
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { anchorId }                             from '../core/Block.js';
+import { anchorId }                                               from '../core/Block.js';
 import { renderInlineToDOM, renderInlineToHTML, escHtml, escAttr } from '../inline/InlineRenderer.js';
-import { getBlockDef }                          from './BlockSchema.js';
+import { getBlockDef }                                            from './BlockSchema.js';
 
-// ─── Public entry point ───────────────────────────────────────────────────────
-export function renderBlock(block, { books = [], onEventClick, onCiteClick } = {}) {
-  const el = _render(block, { books, onEventClick, onCiteClick });
+const LAYOUT_OPTIONS = ['grid','masonry','carousel','strip'];
+
+// ─── Public ───────────────────────────────────────────────────────────────────
+
+export function renderBlock(block, opts = {}) {
+  const el = _render(block, opts);
   if (el) {
-    el.id = anchorId(block.id);
-    el.dataset.blockId = block.id;
+    el.id                = anchorId(block.id);
+    el.dataset.blockId   = block.id;
     el.dataset.blockType = block.type;
   }
   return el;
 }
 
-// ─── Internal ─────────────────────────────────────────────────────────────────
-function inlineDOM(text, opts) {
-  return renderInlineToDOM(text, {
-    onEventClick: opts.onEventClick,
-    onCiteClick:  opts.onCiteClick,
-  });
+// ─── Dispatcher ───────────────────────────────────────────────────────────────
+
+function il(text, opts) {
+  return renderInlineToDOM(text, { onEventClick: opts.onEventClick, onCiteClick: opts.onCiteClick });
 }
 
 function _render(block, opts) {
-  const { text, meta = {}, type } = block;
+  const { text = '', meta = {}, type } = block;
 
   switch (type) {
+
+    // ── Text ──────────────────────────────────────────────────────────────────
 
     case 'paragraph': {
       const el = document.createElement('p');
       el.className = 'griot-block griot-paragraph';
-      if (text) el.appendChild(inlineDOM(text, opts));
+      if (text) el.appendChild(il(text, opts));
       return el;
     }
 
@@ -55,32 +57,165 @@ function _render(block, opts) {
     case 'blockquote': {
       const el = document.createElement('blockquote');
       el.className = 'griot-block griot-blockquote';
-      if (text) el.appendChild(inlineDOM(text, opts));
+      if (text) el.appendChild(il(text, opts));
       return el;
     }
 
-    case 'callout': {
-      const el    = document.createElement('div');
-      const icon  = document.createElement('span');
-      const body  = document.createElement('div');
-      el.className   = 'griot-block griot-callout';
+    case 'callout':
+    case 'callout_warning':
+    case 'callout_tip':
+    case 'callout_danger': {
+      const ICONS = { callout:'💡', callout_warning:'⚠️', callout_tip:'✅', callout_danger:'🚨' };
+      const el   = document.createElement('div');
+      const icon = document.createElement('span');
+      const body = document.createElement('div');
+      el.className   = `griot-block griot-callout griot-callout--${type.replace('callout_','') || 'info'}`;
       icon.className = 'griot-callout__icon';
       body.className = 'griot-callout__body';
-      icon.textContent = meta.icon ?? '💡';
-      if (text) body.appendChild(inlineDOM(text, opts));
-      el.appendChild(icon);
-      el.appendChild(body);
+      icon.textContent = meta.icon ?? ICONS[type] ?? '💡';
+      if (text) body.appendChild(il(text, opts));
+      el.append(icon, body);
       return el;
     }
 
     case 'code': {
       const pre  = document.createElement('pre');
       const code = document.createElement('code');
-      pre.className  = 'griot-block griot-code';
-      if (meta.language) code.className = `language-${meta.language}`;
+      pre.className = 'griot-block griot-code';
+      if (meta.language) { pre.dataset.language = meta.language; code.className = `language-${meta.language}`; }
       code.textContent = text ?? '';
       pre.appendChild(code);
       return pre;
+    }
+
+    case 'list_ul':
+    case 'list_ol': {
+      const tag = type === 'list_ul' ? 'ul' : 'ol';
+      const el  = document.createElement(tag);
+      el.className = `griot-block griot-list griot-list--${tag}`;
+      for (const item of (text ?? '').split('\n').filter(l => l.trim())) {
+        const li = document.createElement('li');
+        li.appendChild(il(item, opts));
+        el.appendChild(li);
+      }
+      return el;
+    }
+
+    // ── Media ─────────────────────────────────────────────────────────────────
+
+    case 'image': {
+      const fig = document.createElement('figure');
+      fig.className = `griot-block griot-image griot-image--${meta.width ?? 'full'}`;
+      if (meta.uploading) {
+        const sp = document.createElement('div');
+        sp.className = 'griot-media-uploading';
+        sp.textContent = 'Uploading…';
+        fig.appendChild(sp);
+      } else if (meta.src) {
+        const img = document.createElement('img');
+        img.src = meta.src; img.alt = meta.alt ?? '';
+        fig.appendChild(img);
+        if (meta.caption) {
+          const cap = document.createElement('figcaption');
+          cap.textContent = meta.caption;
+          fig.appendChild(cap);
+        }
+      }
+      return fig;
+    }
+
+    case 'video': {
+      const fig = document.createElement('figure');
+      fig.className = 'griot-block griot-video';
+      const embed = meta.embedUrl ?? _ytEmbed(meta.src) ?? _vimeoEmbed(meta.src);
+      if (embed) {
+        const iframe = document.createElement('iframe');
+        iframe.src = embed; iframe.className = 'griot-video__iframe';
+        iframe.frameBorder = '0';
+        iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+        iframe.allowFullscreen = true;
+        fig.appendChild(iframe);
+      } else if (meta.src) {
+        const v = document.createElement('video');
+        v.src = meta.src; v.controls = true; v.className = 'griot-video__native';
+        fig.appendChild(v);
+      }
+      if (meta.caption) { const c = document.createElement('figcaption'); c.textContent = meta.caption; fig.appendChild(c); }
+      return fig;
+    }
+
+    case 'audio': {
+      const fig = document.createElement('figure');
+      fig.className = 'griot-block griot-audio';
+      const embed = meta.embedUrl ?? _spotifyEmbed(meta.src) ?? _scEmbed(meta.src);
+      if (embed) {
+        const iframe = document.createElement('iframe');
+        iframe.src = embed; iframe.className = 'griot-audio__iframe';
+        iframe.frameBorder = '0';
+        iframe.allow = 'autoplay; clipboard-write; encrypted-media; fullscreen';
+        fig.appendChild(iframe);
+      } else if (meta.src) {
+        const a = document.createElement('audio');
+        a.src = meta.src; a.controls = true; a.className = 'griot-audio__native';
+        fig.appendChild(a);
+      }
+      if (meta.caption) { const c = document.createElement('figcaption'); c.textContent = meta.caption; fig.appendChild(c); }
+      return fig;
+    }
+
+    case 'gallery': {
+      return _renderGallery(meta.items ?? [], meta.layout ?? 'grid', opts);
+    }
+
+    case 'embed': {
+      const fig = document.createElement('figure');
+      fig.className = 'griot-block griot-embed';
+      if (meta.src) {
+        const iframe = document.createElement('iframe');
+        iframe.src = meta.src;
+        iframe.style.height = `${meta.height ?? 400}px`;
+        iframe.className = 'griot-embed__iframe';
+        iframe.frameBorder = '0';
+        iframe.allow = 'autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media';
+        iframe.allowFullscreen = true;
+        fig.appendChild(iframe);
+      }
+      if (meta.caption) { const c = document.createElement('figcaption'); c.textContent = meta.caption; fig.appendChild(c); }
+      return fig;
+    }
+
+    // ── Structure ─────────────────────────────────────────────────────────────
+
+    case 'table': {
+      const headers  = Array.isArray(meta.headers) ? meta.headers : [];
+      const rows     = Array.isArray(meta.rows)    ? meta.rows    : [];
+      const colCount = Math.max(headers.length, ...rows.map(r => r.length), 1);
+      const wrap  = document.createElement('div');
+      wrap.className = 'griot-block griot-table-wrap';
+      const table = document.createElement('table');
+      table.className = 'griot-table';
+      if (headers.length) {
+        const thead = document.createElement('thead');
+        const tr    = document.createElement('tr');
+        for (let ci = 0; ci < colCount; ci++) {
+          const th = document.createElement('th');
+          th.appendChild(il(headers[ci] ?? '', opts));
+          tr.appendChild(th);
+        }
+        thead.appendChild(tr); table.appendChild(thead);
+      }
+      const tbody = document.createElement('tbody');
+      for (const row of rows) {
+        const tr = document.createElement('tr');
+        for (let ci = 0; ci < colCount; ci++) {
+          const td = document.createElement('td');
+          td.appendChild(il(row[ci] ?? '', opts));
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody); wrap.appendChild(table);
+      return wrap;
     }
 
     case 'divider': {
@@ -89,36 +224,18 @@ function _render(block, opts) {
       return el;
     }
 
-    case 'image': {
-      const figure  = document.createElement('figure');
-      const img     = document.createElement('img');
-      figure.className = 'griot-block griot-image';
-      img.src = meta.src ?? '';
-      img.alt = meta.alt ?? '';
-      figure.appendChild(img);
-      if (meta.caption) {
-        const cap = document.createElement('figcaption');
-        cap.textContent = meta.caption;
-        figure.appendChild(cap);
-      }
-      return figure;
-    }
-
     case 'timeline_ref': {
       const el = document.createElement('div');
       el.className = 'griot-block griot-timeline-ref';
       if (meta.eventId && opts.onEventClick) {
-        el.setAttribute('role', 'button');
-        el.tabIndex = 0;
+        el.setAttribute('role','button'); el.tabIndex = 0;
         el.addEventListener('click', () => opts.onEventClick(meta.eventId));
-        el.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' || e.key === ' ') opts.onEventClick(meta.eventId);
-        });
+        el.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' ') opts.onEventClick(meta.eventId); });
       }
       el.innerHTML = `
         <span class="griot-timeline-ref__icon">⏱</span>
         <div class="griot-timeline-ref__body">
-          <div class="griot-timeline-ref__title">${escHtml(meta.eventTitle || 'Timeline Event')}</div>
+          <div class="griot-timeline-ref__title">${escHtml(meta.eventTitle||'Timeline Event')}</div>
           ${meta.note ? `<div class="griot-timeline-ref__note">${escHtml(meta.note)}</div>` : ''}
         </div>
         ${meta.eventId ? '<span class="griot-timeline-ref__arrow">→</span>' : ''}
@@ -133,69 +250,99 @@ function _render(block, opts) {
     default: {
       const el = document.createElement('p');
       el.className = 'griot-block griot-paragraph';
-      el.textContent = text ?? '';
+      if (text) el.appendChild(il(text, opts));
       return el;
     }
   }
 }
+
+// ─── Gallery renderer ─────────────────────────────────────────────────────────
+
+function _renderGallery(items, layout, opts) {
+  const wrap = document.createElement('div');
+  wrap.className = `griot-block griot-gallery griot-gallery--${LAYOUT_OPTIONS.includes(layout)?layout:'grid'}`;
+
+  if (!items.length) {
+    wrap.innerHTML = `<div class="griot-gallery__empty">No images yet</div>`;
+    return wrap;
+  }
+
+  for (const [i, item] of items.entries()) {
+    const el  = document.createElement('div');
+    el.className = 'griot-gallery__item';
+    const img = document.createElement('img');
+    img.src = item.src ?? item.url ?? '';
+    img.alt = item.alt ?? item.alt_text ?? '';
+    img.loading = 'lazy';
+    el.appendChild(img);
+    if (item.caption) {
+      const cap = document.createElement('p');
+      cap.className = 'griot-gallery__caption';
+      cap.textContent = item.caption;
+      el.appendChild(cap);
+    }
+    wrap.appendChild(el);
+  }
+  return wrap;
+}
+
+// ─── Citation renderer ────────────────────────────────────────────────────────
 
 function _renderCitation(block, opts) {
   const { meta = {} } = block;
   const wrap = document.createElement('figure');
   wrap.className = 'griot-block griot-citation';
 
-  if (!meta.bookId) {
-    wrap.innerHTML = `<div class="griot-citation__empty">📖 No source selected yet</div>`;
-    return wrap;
-  }
+  if (!meta.bookId) { wrap.innerHTML = `<div class="griot-citation__empty">📖 No source selected yet</div>`; return wrap; }
 
   const book = (opts.books ?? []).find(b => b.id === meta.bookId);
   const unit = book?.units?.find(u => u.id === meta.unitId);
-
-  if (!book || !unit) {
-    wrap.innerHTML = `<div class="griot-citation__missing">📖 Source not found — book may have been removed</div>`;
-    return wrap;
-  }
+  if (!book || !unit) { wrap.innerHTML = `<div class="griot-citation__missing">📖 Source not found</div>`; return wrap; }
 
   const inner = document.createElement('div');
   inner.className = 'griot-citation__inner';
-
-  // Header
-  const hdr = document.createElement('div');
-  hdr.className = 'griot-citation__header';
-  hdr.innerHTML = `
-    <span class="griot-citation__book-icon">📖</span>
-    <span class="griot-citation__book-title">${escHtml(book.title)}</span>
-    ${book.author ? `<span class="griot-citation__author">${escHtml(book.author)}</span>` : ''}
-    <span class="griot-citation__unit">${escHtml(unit.label)}</span>
+  inner.innerHTML = `
+    <div class="griot-citation__header">
+      <span class="griot-citation__book-icon">📖</span>
+      <span class="griot-citation__book-title">${escHtml(book.title)}</span>
+      ${book.author ? `<span class="griot-citation__author">${escHtml(book.author)}</span>` : ''}
+      <span class="griot-citation__unit">${escHtml(unit.label)}</span>
+    </div>
+    ${meta.quote ? `<blockquote class="griot-citation__quote">${escHtml(meta.quote)}</blockquote>` : ''}
   `;
-  inner.appendChild(hdr);
-
-  // Quote
-  if (meta.quote) {
-    const q = document.createElement('blockquote');
-    q.className = 'griot-citation__quote';
-    q.textContent = meta.quote;
-    inner.appendChild(q);
-  }
-
-  // Note (supports inline syntax)
   if (meta.note) {
     const note = document.createElement('div');
     note.className = 'griot-citation__note';
-    note.appendChild(inlineDOM(meta.note, opts));
+    note.appendChild(renderInlineToDOM(meta.note, opts));
     inner.appendChild(note);
   }
-
   wrap.appendChild(inner);
-
-  // Content preview
-  if (unit.content) {
-    const preview = document.createElement('div');
-    preview.className = 'griot-citation__preview';
-    preview.textContent = unit.content.slice(0, 180) + (unit.content.length > 180 ? '…' : '');
-    wrap.appendChild(preview);
-  }
-
   return wrap;
 }
+
+// ─── Embed URL helpers ────────────────────────────────────────────────────────
+
+function _ytEmbed(src) {
+  if (!src) return null;
+  const m = src.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([a-zA-Z0-9_-]{11})/);
+  return m ? `https://www.youtube.com/embed/${m[1]}?rel=0` : null;
+}
+function _vimeoEmbed(src) {
+  if (!src) return null;
+  const m = src.match(/vimeo\.com\/(\d+)/);
+  return m ? `https://player.vimeo.com/video/${m[1]}` : null;
+}
+function _spotifyEmbed(src) {
+  if (!src) return null;
+  const m = src.match(/open\.spotify\.com\/(track|album|playlist|episode)\/([a-zA-Z0-9]+)/);
+  return m ? `https://open.spotify.com/embed/${m[1]}/${m[2]}` : null;
+}
+function _scEmbed(src) {
+  if (!src) return null;
+  if (src.includes('soundcloud.com/'))
+    return `https://w.soundcloud.com/player/?url=${encodeURIComponent(src)}&color=%236366f1&auto_play=false&hide_related=true&show_comments=false`;
+  return null;
+}
+
+// Export helpers for editor use
+export { _ytEmbed as resolveYouTube, _vimeoEmbed as resolveVimeo, _spotifyEmbed as resolveSpotify, _scEmbed as resolveSoundCloud };

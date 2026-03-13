@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Griot — Block Editor Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ── Reset & Tokens ───────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0e0f;
+    --surface: #161618;
+    --surface2: #1e1e21;
+    --border: #2a2a2e;
+    --border2: #3a3a3f;
+    --text: #e8e8ec;
+    --muted: #6b6b75;
+    --accent: #c8f060;
+    --accent2: #60c8f0;
+    --accent3: #f060c8;
+    --red: #f06060;
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'Instrument Serif', serif;
+    --font-mono: 'DM Mono', monospace;
+    --radius: 6px;
+    --radius-lg: 12px;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.65;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Noise overlay ──────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    opacity: .03;
+    pointer-events: none;
+    z-index: 9999;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    background-size: 200px;
+  }
+
+  /* ── Nav ──────────────────────────────────────── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    height: 56px;
+    background: rgba(14,14,15,.88);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-logo {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -.02em;
+    color: var(--accent);
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 28px;
+    list-style: none;
+  }
+
+  .nav-links a {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-decoration: none;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    transition: color .2s;
+  }
+  .nav-links a:hover { color: var(--text); }
+
+  .nav-cta {
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    padding: 8px 18px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  .nav-cta:hover { opacity: .85; }
+
+  /* ── Hero ───────────────────────────────────── */
+  .hero {
+    padding: 160px 0 100px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero-glow {
+    position: absolute;
+    top: 60px; left: 50%;
+    transform: translateX(-50%);
+    width: 700px; height: 400px;
+    background: radial-gradient(ellipse at center, rgba(200,240,96,.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 100px;
+    padding: 5px 14px 5px 8px;
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    margin-bottom: 32px;
+    animation: fadeUp .6s ease both;
+  }
+
+  .hero-badge span {
+    background: var(--accent);
+    color: #000;
+    border-radius: 100px;
+    padding: 2px 10px;
+    font-size: 11px;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(56px, 9vw, 110px);
+    font-weight: 800;
+    letter-spacing: -.04em;
+    line-height: .95;
+    color: var(--text);
+    animation: fadeUp .6s .1s ease both;
+  }
+
+  h1 em {
+    font-style: italic;
+    font-family: var(--font-body);
+    color: var(--accent);
+  }
+
+  .hero-sub {
+    margin-top: 24px;
+    font-size: 19px;
+    color: var(--muted);
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
+    animation: fadeUp .6s .2s ease both;
+  }
+
+  .hero-actions {
+    margin-top: 40px;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    animation: fadeUp .6s .3s ease both;
+  }
+
+  .btn-primary {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    padding: 12px 28px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: transform .15s, opacity .15s;
+    text-decoration: none;
+  }
+  .btn-primary:hover { opacity: .88; transform: translateY(-1px); }
+
+  .btn-ghost {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border2);
+    padding: 12px 28px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    text-decoration: none;
+  }
+  .btn-ghost:hover { border-color: var(--muted); background: var(--surface2); }
+
+  /* ── Stats ─────────────────────────────────── */
+  .stats {
+    display: flex;
+    justify-content: center;
+    gap: 60px;
+    padding: 48px 32px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .stat-item {
+    text-align: center;
+    animation: fadeUp .6s ease both;
+  }
+
+  .stat-value {
+    font-family: var(--font-display);
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -.03em;
+    display: block;
+  }
+
+  .stat-label {
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  /* ── Section ───────────────────────────────── */
+  .section {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 80px 32px;
+  }
+
+  .section-label {
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  h2 {
+    font-family: var(--font-display);
+    font-size: clamp(28px, 4vw, 44px);
+    font-weight: 800;
+    letter-spacing: -.03em;
+    line-height: 1.05;
+    color: var(--text);
+    margin-bottom: 16px;
+  }
+
+  h3 {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .lead {
+    font-size: 18px;
+    color: var(--muted);
+    max-width: 600px;
+    margin-bottom: 52px;
+  }
+
+  /* ── Live Editor Demo ───────────────────────── */
+  .demo-shell {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: 0 32px 80px rgba(0,0,0,.5);
+    animation: fadeUp .7s .1s ease both;
+  }
+
+  .demo-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-red { background: #ff5f57; }
+  .dot-yellow { background: #ffbd2e; }
+  .dot-green { background: #28c940; }
+
+  .demo-title-text {
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-left: 8px;
+    letter-spacing: .04em;
+  }
+
+  /* Toolbar */
+  .demo-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .tb-btn {
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 700;
+    background: transparent;
+    color: var(--muted);
+    border: none;
+    padding: 5px 9px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background .1s, color .1s;
+  }
+  .tb-btn:hover { background: var(--surface2); color: var(--text); }
+  .tb-btn.active { background: var(--border2); color: var(--text); }
+
+  .tb-sep {
+    width: 1px; height: 18px;
+    background: var(--border);
+    margin: 0 4px;
+  }
+
+  /* Editor body */
+  .demo-body {
+    display: flex;
+    min-height: 460px;
+  }
+
+  /* Block list sidebar */
+  .demo-sidebar {
+    width: 200px;
+    border-right: 1px solid var(--border);
+    padding: 16px 0;
+    flex-shrink: 0;
+  }
+
+  .sidebar-label {
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0 16px 8px;
+  }
+
+  .sidebar-block {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 16px;
+    cursor: pointer;
+    transition: background .1s;
+    user-select: none;
+  }
+  .sidebar-block:hover { background: var(--surface2); }
+  .sidebar-block.active { background: rgba(200,240,96,.08); }
+
+  .sidebar-icon {
+    width: 28px; height: 28px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+    transition: border-color .1s;
+  }
+  .sidebar-block:hover .sidebar-icon,
+  .sidebar-block.active .sidebar-icon {
+    border-color: var(--border2);
+  }
+
+  .sidebar-name {
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    transition: color .1s;
+  }
+  .sidebar-block:hover .sidebar-name,
+  .sidebar-block.active .sidebar-name { color: var(--text); }
+
+  /* Canvas */
+  .demo-canvas {
+    flex: 1;
+    padding: 32px 40px;
+    overflow-y: auto;
+  }
+
+  /* ── Block rendering ────────────────────────── */
+  .griot-block {
+    position: relative;
+    margin-bottom: 4px;
+    animation: blockIn .2s ease both;
+  }
+
+  @keyframes blockIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .griot-block:hover .block-handle {
+    opacity: 1;
+  }
+
+  .block-handle {
+    position: absolute;
+    left: -28px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
+    transition: opacity .15s;
+    cursor: grab;
+    color: var(--muted);
+    font-size: 14px;
+    user-select: none;
+    padding: 4px;
+  }
+
+  .griot-h1 {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -.03em;
+    color: var(--text);
+    line-height: 1.1;
+    margin-bottom: 8px;
+    outline: none;
+    border: none;
+    width: 100%;
+    background: transparent;
+    caret-color: var(--accent);
+  }
+
+  .griot-h2 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    color: var(--text);
+    outline: none;
+    border: none;
+    width: 100%;
+    background: transparent;
+    caret-color: var(--accent);
+    margin-top: 16px;
+  }
+
+  .griot-p {
+    font-family: var(--font-body);
+    font-size: 16px;
+    color: var(--text);
+    outline: none;
+    border: none;
+    width: 100%;
+    background: transparent;
+    caret-color: var(--accent);
+    padding: 2px 0;
+    line-height: 1.7;
+  }
+  .griot-p:empty::before {
+    content: attr(data-placeholder);
+    color: var(--muted);
+    pointer-events: none;
+  }
+
+  .griot-callout {
+    display: flex;
+    gap: 12px;
+    background: rgba(200,240,96,.06);
+    border: 1px solid rgba(200,240,96,.2);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin: 4px 0;
+  }
+  .callout-icon { font-size: 18px; line-height: 1.6; flex-shrink: 0; }
+  .callout-text {
+    font-family: var(--font-body);
+    font-size: 15px;
+    color: var(--text);
+    outline: none;
+    flex: 1;
+    caret-color: var(--accent);
+    line-height: 1.65;
+  }
+
+  .griot-code {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin: 4px 0;
+    overflow-x: auto;
+  }
+  .code-lang {
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .griot-code pre {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #a8d8a8;
+    line-height: 1.65;
+    white-space: pre;
+    outline: none;
+  }
+
+  .griot-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 12px 0;
+  }
+
+  .griot-list {
+    padding: 2px 0 2px 20px;
+  }
+  .griot-list li {
+    font-family: var(--font-body);
+    font-size: 16px;
+    color: var(--text);
+    line-height: 1.7;
+    margin-bottom: 2px;
+  }
+  .griot-list li::marker { color: var(--accent); }
+
+  .griot-image {
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin: 8px 0;
+  }
+  .griot-image img { width: 100%; height: auto; display: block; }
+  .image-caption {
+    font-family: var(--font-display);
+    font-size: 11px;
+    color: var(--muted);
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    letter-spacing: .03em;
+  }
+
+  /* Inline styles */
+  strong { color: var(--text); }
+  em { font-style: italic; }
+  .inline-code {
+    font-family: var(--font-mono);
+    font-size: .85em;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 5px;
+    color: var(--accent2);
+  }
+  .inline-highlight { background: rgba(200,240,96,.18); border-radius: 2px; padding: 0 2px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(96,200,240,.12);
+    border: 1px solid rgba(96,200,240,.3);
+    border-radius: 4px;
+    padding: 0 7px;
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent2);
+    cursor: pointer;
+    vertical-align: middle;
+    transition: background .15s;
+  }
+  .chip:hover { background: rgba(96,200,240,.22); }
+  .chip-event { border-color: rgba(240,96,200,.3); background: rgba(240,96,200,.1); color: var(--accent3); }
+  .chip-event:hover { background: rgba(240,96,200,.2); }
+
+  /* Slash menu popup */
+  .slash-menu {
+    position: absolute;
+    left: 0; top: 100%;
+    z-index: 50;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 16px 40px rgba(0,0,0,.5);
+    width: 260px;
+    padding: 8px;
+    display: none;
+    animation: popIn .15s ease;
+  }
+
+  @keyframes popIn {
+    from { opacity: 0; transform: translateY(-6px) scale(.97); }
+    to   { opacity: 1; transform: none scale(1); }
+  }
+
+  .slash-menu.open { display: block; }
+
+  .slash-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background .1s;
+  }
+  .slash-item:hover, .slash-item.selected { background: var(--surface2); }
+
+  .slash-icon {
+    width: 32px; height: 32px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .slash-info h4 {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .slash-info p {
+    font-family: var(--font-display);
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.3;
+  }
+
+  /* Format toolbar */
+  .format-bar {
+    position: absolute;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    z-index: 60;
+    transition: opacity .15s;
+  }
+
+  .format-bar button {
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 700;
+    background: transparent;
+    color: var(--muted);
+    border: none;
+    padding: 4px 7px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background .1s, color .1s;
+  }
+  .format-bar button:hover { background: var(--border); color: var(--text); }
+  .format-bar .tb-sep { height: 14px; }
+
+  /* JSON output panel */
+  .json-panel {
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+    padding: 16px 20px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #7ec87e;
+    max-height: 140px;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+
+  /* ── Features grid ──────────────────────────── */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .feature-card {
+    background: var(--surface);
+    padding: 28px 28px 28px;
+    transition: background .2s;
+  }
+  .feature-card:hover { background: var(--surface2); }
+
+  .feature-icon {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    margin-bottom: 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+  }
+
+  .feature-card h3 {
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+
+  .feature-card p {
+    font-family: var(--font-display);
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  /* ── Code sample ────────────────────────────── */
+  .code-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  .code-tab {
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 10px 18px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    letter-spacing: .04em;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color .15s;
+  }
+  .code-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .code-block-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .code-snippet {
+    display: none;
+    padding: 24px 28px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.75;
+    overflow-x: auto;
+  }
+  .code-snippet.active { display: block; }
+
+  .kw { color: var(--accent3); }
+  .fn { color: var(--accent2); }
+  .str { color: #f0b060; }
+  .cm { color: var(--muted); font-style: italic; }
+  .num { color: var(--accent); }
+
+  /* ── Block type showcase ──────────────────── */
+  .block-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+  }
+
+  .block-pill {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .block-pill:hover {
+    border-color: var(--border2);
+    background: var(--surface2);
+  }
+
+  .pill-icon { font-size: 18px; }
+  .pill-name {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .pill-cat {
+    font-family: var(--font-display);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: .04em;
+  }
+
+  /* ── Inline demo ────────────────────────────── */
+  .inline-demo {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px 28px;
+  }
+
+  .inline-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 15px;
+  }
+  .inline-row:last-child { border-bottom: none; }
+
+  .syntax-raw {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--muted);
+    min-width: 180px;
+    flex-shrink: 0;
+  }
+
+  .arrow { color: var(--border2); font-size: 12px; }
+
+  /* ── Footer ─────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .footer-logo {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 20px;
+    color: var(--accent);
+    letter-spacing: -.02em;
+  }
+
+  .footer-copy {
+    font-family: var(--font-display);
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: .04em;
+  }
+
+  .footer-links {
+    display: flex;
+    gap: 20px;
+    list-style: none;
+  }
+  .footer-links a {
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-decoration: none;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    transition: color .15s;
+  }
+  .footer-links a:hover { color: var(--text); }
+
+  /* ── Animations ─────────────────────────────── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* Observe fade-up */
+  .fade-up {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity .5s ease, transform .5s ease;
+  }
+  .fade-up.visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* ── Typing cursor blink ─────────────────────── */
+  .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+    margin-left: 1px;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+  }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav>
+  <div class="nav-logo">griot</div>
+  <ul class="nav-links">
+    <li><a href="#demo">Demo</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#blocks">Blocks</a></li>
+    <li><a href="#api">API</a></li>
+  </ul>
+  <button class="nav-cta">npm install griot</button>
+</nav>
+
+<!-- ── Hero ── -->
+<section class="hero" id="top">
+  <div class="hero-glow"></div>
+  <div class="hero-badge"><span>v1.0</span> Zero Dependencies · Plain JS · MIT</div>
+  <h1>A block editor<br>for the <em>open</em> web.</h1>
+  <p class="hero-sub">Inspired by Notion. Built with vanilla JavaScript. No bundler required, no framework lock-in.</p>
+  <div class="hero-actions">
+    <a href="#demo" class="btn-primary">Try the Demo</a>
+    <a href="#api" class="btn-ghost">Read the Docs</a>
+  </div>
+</section>
+
+<!-- ── Stats ── -->
+<div class="stats">
+  <div class="stat-item"><span class="stat-value">0</span><span class="stat-label">Dependencies</span></div>
+  <div class="stat-item"><span class="stat-value">16+</span><span class="stat-label">Block Types</span></div>
+  <div class="stat-item"><span class="stat-value">12</span><span class="stat-label">Inline Tokens</span></div>
+  <div class="stat-item"><span class="stat-value">∞</span><span class="stat-label">Extensible</span></div>
+</div>
+
+<!-- ── Live Editor Demo ── -->
+<section class="section" id="demo">
+  <div class="section-label">Interactive Demo</div>
+  <h2>Write. Format. Extend.</h2>
+  <p class="lead">Click blocks on the left to insert them. Select text to see the format toolbar. Type <code style="font-family: var(--font-mono); font-size: 14px; color: var(--accent2);">/</code> to open the slash menu.</p>
+
+  <div class="demo-shell fade-up">
+    <div class="demo-titlebar">
+      <div class="dot dot-red"></div>
+      <div class="dot dot-yellow"></div>
+      <div class="dot dot-green"></div>
+      <span class="demo-title-text">griot editor — untitled.griot</span>
+    </div>
+
+    <div class="demo-toolbar">
+      <button class="tb-btn active" onclick="setView('editor')">Editor</button>
+      <button class="tb-btn" onclick="setView('viewer')">Viewer</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="historyUndo()" title="Undo">↩ Undo</button>
+      <button class="tb-btn" onclick="historyRedo()" title="Redo">↪ Redo</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="clearDoc()">Clear</button>
+      <button class="tb-btn" onclick="loadSample()">Load Sample</button>
+    </div>
+
+    <div class="demo-body">
+      <!-- Sidebar -->
+      <div class="demo-sidebar">
+        <div class="sidebar-label">Insert Block</div>
+        <div class="sidebar-block" onclick="insertBlock('h1')">
+          <div class="sidebar-icon">H1</div>
+          <span class="sidebar-name">Heading 1</span>
+        </div>
+        <div class="sidebar-block" onclick="insertBlock('h2')">
+          <div class="sidebar-icon">H2</div>
+          <span class="sidebar-name">Heading 2</span>
+        </div>
+        <div class="sidebar-block" onclick="insertBlock('p')">
+          <div class="sidebar-icon">¶</div>
+          <span class="sidebar-name">Paragraph</span>
+        </div>
+        <div class="sidebar-block" onclick="insertBlock('callout')">
+          <div class="sidebar-icon">💡</div>
+          <span class="sidebar-name">Callout</span>
+        </div>
+        <div class="sidebar-block" onclick="insertBlock('code')">
+          <div class="sidebar-icon">&lt;/&gt;</div>
+          <span class="sidebar-name">Code Block</span>
+        </div>
+        <div class="sidebar-block" onclick="insertBlock('list')">
+          <div class="sidebar-icon">≡</div>
+          <span class="sidebar-name">List</span>
+        </div>
+        <div class="sidebar-block" onclick="insertBlock('divider')">
+          <div class="sidebar-icon">—</div>
+          <span class="sidebar-name">Divider</span>
+        </div>
+        <div class="sidebar-block" onclick="insertBlock('image')">
+          <div class="sidebar-icon">🖼</div>
+          <span class="sidebar-name">Image</span>
+        </div>
+      </div>
+
+      <!-- Canvas -->
+      <div class="demo-canvas" id="demo-canvas">
+        <!-- blocks rendered here -->
+      </div>
+    </div>
+
+    <!-- JSON output -->
+    <div class="json-panel" id="json-panel">// Document JSON will appear here...</div>
+  </div>
+</section>
+
+<!-- ── Features ── -->
+<section class="section" id="features">
+  <div class="section-label">Why Griot</div>
+  <h2>Everything you need.<br>Nothing you don't.</h2>
+  <p class="lead">Built for developers who want a real editing experience without the bloat of a framework-heavy dependency.</p>
+
+  <div class="features-grid fade-up">
+    <div class="feature-card">
+      <div class="feature-icon">🧱</div>
+      <h3>Block-based</h3>
+      <p>Every element is a block — headings, paragraphs, callouts, code, media, tables, dividers, citations, and timelines.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">✍️</div>
+      <h3>Inline Markup</h3>
+      <p>Lightweight syntax for bold, italic, highlights, colored text, inline code, links, and custom chip types.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <h3>Zero Dependencies</h3>
+      <p>Pure ES modules. No React, no Vue, no bundler required. Drop it in via CDN or install from npm.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔀</div>
+      <h3>Immutable Ops</h3>
+      <p>Every document operation returns a new document object, making undo/redo, diffing, and syncing trivial.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🎨</div>
+      <h3>Unstyled by Design</h3>
+      <p>No opinionated CSS. All elements use semantic <code class="inline-code">griot-</code> class names. Style it your way.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔧</div>
+      <h3>Schema-Driven</h3>
+      <p>Block types live in a single schema file. Add new types at runtime or extend the schema statically.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📖</div>
+      <h3>Dual Mode</h3>
+      <p>The same document renders in both Editor and read-only Viewer mode — same blocks, same inline tokens.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⌨️</div>
+      <h3>Slash Commands</h3>
+      <p>Type <code class="inline-code">/</code> anywhere to open the block picker. Fully keyboard-navigable.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">↩️</div>
+      <h3>Undo / Redo</h3>
+      <p>Built-in linear history stack. Use it via the Editor or independently in your own app.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── Block Types ── -->
+<section class="section" id="blocks">
+  <div class="section-label">Block Types</div>
+  <h2>16+ block types out of the box.</h2>
+  <p class="lead">From simple text to rich media, every block is defined in a single extensible schema.</p>
+
+  <div class="block-gallery fade-up" id="block-gallery"></div>
+</section>
+
+<!-- ── Inline syntax ── -->
+<section class="section">
+  <div class="section-label">Inline Markup</div>
+  <h2>Rich text, lightweight syntax.</h2>
+  <p class="lead">The inline parser is independent — use it standalone anywhere you need formatted text rendering.</p>
+
+  <div class="inline-demo fade-up">
+    <div class="inline-row">
+      <span class="syntax-raw">**bold**</span>
+      <span class="arrow">→</span>
+      <span><strong>bold</strong></span>
+    </div>
+    <div class="inline-row">
+      <span class="syntax-raw">*italic*</span>
+      <span class="arrow">→</span>
+      <span><em>italic</em></span>
+    </div>
+    <div class="inline-row">
+      <span class="syntax-raw">~~strikethrough~~</span>
+      <span class="arrow">→</span>
+      <span style="text-decoration:line-through">strikethrough</span>
+    </div>
+    <div class="inline-row">
+      <span class="syntax-raw">`inline code`</span>
+      <span class="arrow">→</span>
+      <span class="inline-code">inline code</span>
+    </div>
+    <div class="inline-row">
+      <span class="syntax-raw">==highlight==</span>
+      <span class="arrow">→</span>
+      <span class="inline-highlight">highlighted text</span>
+    </div>
+    <div class="inline-row">
+      <span class="syntax-raw">{#c8f060:colored}</span>
+      <span class="arrow">→</span>
+      <span style="color:#c8f060">colored</span>
+    </div>
+    <div class="inline-row">
+      <span class="syntax-raw">[[cite:b1|Citation]]</span>
+      <span class="arrow">→</span>
+      <span class="chip">📎 Citation</span>
+    </div>
+    <div class="inline-row">
+      <span class="syntax-raw">[[event:e1|Event]]</span>
+      <span class="arrow">→</span>
+      <span class="chip chip-event">⚡ Event</span>
+    </div>
+  </div>
+</section>
+
+<!-- ── API / Code ── -->
+<section class="section" id="api">
+  <div class="section-label">API Reference</div>
+  <h2>Clean, composable API.</h2>
+  <p class="lead">Immutable document operations, standalone inline rendering, and a simple event model.</p>
+
+  <div class="code-block-wrap fade-up">
+    <div class="code-tabs">
+      <button class="code-tab active" onclick="switchTab('editor')">Editor</button>
+      <button class="code-tab" onclick="switchTab('viewer')">Viewer</button>
+      <button class="code-tab" onclick="switchTab('inline')">Inline</button>
+      <button class="code-tab" onclick="switchTab('ops')">Doc Ops</button>
+    </div>
+
+    <div class="code-snippet active" id="tab-editor"><span class="cm">// Initialize the editor</span>
+<span class="kw">import</span> { <span class="fn">Editor</span>, <span class="fn">createDocument</span> } <span class="kw">from</span> <span class="str">'griot'</span>;
+
+<span class="kw">const</span> doc = <span class="fn">createDocument</span>([
+  { id: <span class="str">'b1'</span>, type: <span class="str">'heading'</span>, text: <span class="str">'My Document'</span>, meta: { level: <span class="num">1</span> } },
+  { id: <span class="str">'b2'</span>, type: <span class="str">'paragraph'</span>, text: <span class="str">'Start writing...'</span> },
+]);
+
+<span class="kw">const</span> editor = <span class="kw">new</span> <span class="fn">Editor</span>(container, {
+  doc,
+  <span class="fn">onChange</span>: (newDoc) => console.<span class="fn">log</span>(<span class="str">'changed'</span>, newDoc),
+  <span class="fn">onEventClick</span>: (id) => console.<span class="fn">log</span>(<span class="str">'event:'</span>, id),
+  <span class="fn">onCiteClick</span>: (id) => console.<span class="fn">log</span>(<span class="str">'cite:'</span>, id),
+});</div>
+
+    <div class="code-snippet" id="tab-viewer"><span class="cm">// Read-only viewer</span>
+<span class="kw">import</span> { <span class="fn">Viewer</span> } <span class="kw">from</span> <span class="str">'griot'</span>;
+
+<span class="kw">const</span> viewer = <span class="kw">new</span> <span class="fn">Viewer</span>(container, {
+  doc: myDocument,
+  books: myBooks,
+  highlightBlockId: <span class="str">'b2'</span>,
+  <span class="fn">onCiteClick</span>: (id) => showCitation(id),
+});
+
+<span class="cm">// Scroll to and highlight a block</span>
+viewer.<span class="fn">setHighlight</span>(<span class="str">'b1'</span>);</div>
+
+    <div class="code-snippet" id="tab-inline"><span class="cm">// Use the inline renderer standalone</span>
+<span class="kw">import</span> { <span class="fn">renderInlineToDOM</span>, <span class="fn">renderInlineToHTML</span> } <span class="kw">from</span> <span class="str">'griot'</span>;
+
+<span class="kw">const</span> text = <span class="str">'This is **bold** and `code` with ==highlight=='</span>;
+
+<span class="cm">// Render to DOM fragment</span>
+<span class="kw">const</span> frag = <span class="fn">renderInlineToDOM</span>(text, {
+  <span class="fn">onEventClick</span>: (id) => console.<span class="fn">log</span>(id),
+  <span class="fn">onCiteClick</span>: (id) => console.<span class="fn">log</span>(id),
+});
+el.<span class="fn">appendChild</span>(frag);
+
+<span class="cm">// Or render to an HTML string</span>
+<span class="kw">const</span> html = <span class="fn">renderInlineToHTML</span>(text);</div>
+
+    <div class="code-snippet" id="tab-ops"><span class="cm">// Immutable document operations</span>
+<span class="kw">import</span> { <span class="fn">updateBlock</span>, <span class="fn">insertBlockAfter</span>, <span class="fn">removeBlock</span>, <span class="fn">splitBlock</span> } <span class="kw">from</span> <span class="str">'griot'</span>;
+
+<span class="cm">// Every operation returns a NEW document</span>
+<span class="kw">let</span> doc = <span class="fn">createDocument</span>();
+
+doc = <span class="fn">updateBlock</span>(doc, <span class="str">'b1'</span>, { text: <span class="str">'Updated!'</span> });
+doc = <span class="fn">insertBlockAfter</span>(doc, <span class="str">'b1'</span>, <span class="fn">createBlock</span>(<span class="str">'paragraph'</span>));
+doc = <span class="fn">splitBlock</span>(doc, <span class="str">'b2'</span>, <span class="num">12</span>); <span class="cm">// split at offset</span>
+doc = <span class="fn">removeBlock</span>(doc, <span class="str">'b3'</span>);</div>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+  <div class="footer-logo">griot</div>
+  <ul class="footer-links">
+    <li><a href="#">GitHub</a></li>
+    <li><a href="#">npm</a></li>
+    <li><a href="#">Docs</a></li>
+    <li><a href="#">MIT License</a></li>
+  </ul>
+  <div class="footer-copy">© 2025 Griot. Zero dependencies, infinite possibility.</div>
+</footer>
+
+<script>
+  // ── State ──────────────────────────────────────
+  let blocks = [];
+  let history = [];
+  let historyIndex = -1;
+  let viewMode = 'editor';
+
+  const BLOCK_TYPES = [
+    { type: 'h1', icon: 'H1', label: 'Heading 1', cat: 'text' },
+    { type: 'h2', icon: 'H2', label: 'Heading 2', cat: 'text' },
+    { type: 'p', icon: '¶', label: 'Paragraph', cat: 'text' },
+    { type: 'callout', icon: '💡', label: 'Callout', cat: 'text' },
+    { type: 'code', icon: '⌨', label: 'Code Block', cat: 'text' },
+    { type: 'list', icon: '≡', label: 'Bullet List', cat: 'text' },
+    { type: 'divider', icon: '—', label: 'Divider', cat: 'layout' },
+    { type: 'image', icon: '🖼', label: 'Image', cat: 'media' },
+    { type: 'table', icon: '⊞', label: 'Table', cat: 'layout' },
+    { type: 'video', icon: '▶', label: 'Video', cat: 'media' },
+    { type: 'audio', icon: '♪', label: 'Audio', cat: 'media' },
+    { type: 'quote', icon: '"', label: 'Blockquote', cat: 'text' },
+    { type: 'timeline', icon: '📅', label: 'Timeline', cat: 'special' },
+    { type: 'book', icon: '📚', label: 'Book Citation', cat: 'special' },
+    { type: 'toggle', icon: '▸', label: 'Toggle', cat: 'layout' },
+    { type: 'embed', icon: '⊕', label: 'Embed', cat: 'media' },
+  ];
+
+  function uid() {
+    return 'b' + Math.random().toString(36).slice(2, 8);
+  }
+
+  function saveHistory() {
+    history = history.slice(0, historyIndex + 1);
+    history.push(JSON.parse(JSON.stringify(blocks)));
+    historyIndex = history.length - 1;
+  }
+
+  function historyUndo() {
+    if (historyIndex > 0) {
+      historyIndex--;
+      blocks = JSON.parse(JSON.stringify(history[historyIndex]));
+      renderBlocks();
+    }
+  }
+
+  function historyRedo() {
+    if (historyIndex < history.length - 1) {
+      historyIndex++;
+      blocks = JSON.parse(JSON.stringify(history[historyIndex]));
+      renderBlocks();
+    }
+  }
+
+  // ── Blocks ─────────────────────────────────────
+  function createBlockData(type) {
+    const defaults = {
+      h1: { text: 'Heading 1' },
+      h2: { text: 'Heading 2' },
+      p: { text: '' },
+      callout: { text: 'A helpful callout note.', icon: '💡' },
+      code: { text: 'const griot = await import("griot");\nconst editor = new griot.Editor(el, { doc });', lang: 'javascript' },
+      list: { items: ['First item', 'Second item', 'Third item'] },
+      divider: {},
+      image: { src: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&q=80', caption: 'A sample image' },
+      quote: { text: 'The best way to predict the future is to invent it.', attribution: '— Alan Kay' },
+      table: { headers: ['Name', 'Type', 'Description'], rows: [['text', 'string', 'Block text content'], ['meta', 'object', 'Block metadata'], ['id', 'string', 'Unique identifier']] },
+      video: { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      audio: { url: '' },
+      timeline: { date: '2024-01-15', label: 'Event title' },
+      book: { title: 'The Pragmatic Programmer', author: 'Hunt & Thomas' },
+      toggle: { summary: 'Click to expand', text: 'Hidden content goes here.' },
+      embed: { url: '' },
+    };
+    return { id: uid(), type, ...(defaults[type] || {}) };
+  }
+
+  function insertBlock(type) {
+    const b = createBlockData(type);
+    blocks.push(b);
+    saveHistory();
+    renderBlocks();
+    updateJSON();
+  }
+
+  function removeBlockById(id) {
+    blocks = blocks.filter(b => b.id !== id);
+    saveHistory();
+    renderBlocks();
+    updateJSON();
+  }
+
+  function clearDoc() {
+    blocks = [];
+    saveHistory();
+    renderBlocks();
+    updateJSON();
+  }
+
+  function loadSample() {
+    blocks = [
+      createBlockData('h1'),
+      { ...createBlockData('p'), text: 'Griot is a **lightweight** block editor built with *plain JavaScript*. It has ==zero dependencies== and supports `inline code`, links, and more.' },
+      createBlockData('callout'),
+      createBlockData('code'),
+      createBlockData('list'),
+      createBlockData('divider'),
+      createBlockData('image'),
+    ];
+    blocks[0].text = 'Welcome to Griot';
+    saveHistory();
+    renderBlocks();
+    updateJSON();
+  }
+
+  // ── Inline parser (simplified) ─────────────────
+  function parseInline(text) {
+    if (!text) return '';
+    return text
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/~~(.+?)~~/g, '<span style="text-decoration:line-through">$1</span>')
+      .replace(/`(.+?)`/g, '<span class="inline-code">$1</span>')
+      .replace(/==(.+?)==/g, '<span class="inline-highlight">$1</span>')
+      .replace(/\{#([a-fA-F0-9]{3,6}):(.+?)\}/g, '<span style="color:#$1">$2</span>')
+      .replace(/\{(\w+):(.+?)\}/g, '<span style="color:$1">$2</span>')
+      .replace(/\[\[cite:([^\|]+)\|([^\]]+)\]\]/g, '<span class="chip">📎 $2</span>')
+      .replace(/\[\[event:([^\|]+)\|([^\]]+)\]\]/g, '<span class="chip chip-event">⚡ $2</span>')
+      .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" style="color:var(--accent2)">$1</a>');
+  }
+
+  // ── Render ─────────────────────────────────────
+  function renderBlocks() {
+    const canvas = document.getElementById('demo-canvas');
+    const isViewer = viewMode === 'viewer';
+
+    if (blocks.length === 0) {
+      canvas.innerHTML = `<div style="text-align:center;padding:60px 0;color:var(--muted);font-family:var(--font-display);font-size:14px;">
+        <div style="font-size:40px;margin-bottom:16px;">✦</div>
+        Click a block type on the left or press <kbd style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-family:var(--font-mono);font-size:11px;">/</kbd> to begin writing.
+      </div>`;
+      return;
+    }
+
+    canvas.innerHTML = '';
+    blocks.forEach(b => {
+      const wrap = document.createElement('div');
+      wrap.className = 'griot-block';
+      wrap.dataset.id = b.id;
+
+      if (!isViewer) {
+        const handle = document.createElement('span');
+        handle.className = 'block-handle';
+        handle.textContent = '⠿';
+        wrap.appendChild(handle);
+      }
+
+      let inner = document.createElement('div');
+
+      switch(b.type) {
+        case 'h1': {
+          inner = document.createElement(isViewer ? 'h1' : 'div');
+          inner.className = 'griot-h1';
+          if (!isViewer) inner.contentEditable = 'true';
+          inner.innerHTML = parseInline(b.text || 'Heading 1');
+          if (!isViewer) {
+            inner.addEventListener('input', () => { b.text = inner.textContent; updateJSON(); });
+          }
+          break;
+        }
+        case 'h2': {
+          inner = document.createElement(isViewer ? 'h2' : 'div');
+          inner.className = 'griot-h2';
+          if (!isViewer) inner.contentEditable = 'true';
+          inner.innerHTML = parseInline(b.text || 'Heading 2');
+          if (!isViewer) {
+            inner.addEventListener('input', () => { b.text = inner.textContent; updateJSON(); });
+          }
+          break;
+        }
+        case 'p': {
+          inner = document.createElement('div');
+          inner.className = 'griot-p';
+          if (!isViewer) { inner.contentEditable = 'true'; inner.dataset.placeholder = 'Type \'/\' for commands...'; }
+          inner.innerHTML = parseInline(b.text) || '';
+          if (!isViewer) {
+            inner.addEventListener('input', () => { b.text = inner.textContent; updateJSON(); });
+            inner.addEventListener('keydown', (e) => {
+              if (e.key === '/' && inner.textContent === '') { e.preventDefault(); showSlashMenu(wrap, b.id); }
+            });
+          }
+          break;
+        }
+        case 'callout': {
+          inner = document.createElement('div');
+          inner.className = 'griot-callout';
+          inner.innerHTML = `<span class="callout-icon">${b.icon || '💡'}</span><div class="callout-text" ${!isViewer ? 'contenteditable="true"' : ''}>${parseInline(b.text || '')}</div>`;
+          if (!isViewer) {
+            inner.querySelector('.callout-text').addEventListener('input', (e) => { b.text = e.target.textContent; updateJSON(); });
+          }
+          break;
+        }
+        case 'code': {
+          inner = document.createElement('div');
+          inner.className = 'griot-code';
+          inner.innerHTML = `<div class="code-lang">${b.lang || 'javascript'}</div><pre ${!isViewer ? 'contenteditable="true" spellcheck="false"' : ''}>${escHtml(b.text || '')}</pre>`;
+          if (!isViewer) {
+            inner.querySelector('pre').addEventListener('input', (e) => { b.text = e.target.textContent; updateJSON(); });
+          }
+          break;
+        }
+        case 'list': {
+          inner = document.createElement('ul');
+          inner.className = 'griot-list';
+          (b.items || ['Item']).forEach(item => {
+            const li = document.createElement('li');
+            li.innerHTML = parseInline(item);
+            if (!isViewer) li.contentEditable = 'true';
+            inner.appendChild(li);
+          });
+          break;
+        }
+        case 'divider': {
+          inner = document.createElement('hr');
+          inner.className = 'griot-divider';
+          break;
+        }
+        case 'image': {
+          inner = document.createElement('div');
+          inner.className = 'griot-image';
+          inner.innerHTML = `<img src="${b.src || 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=800&q=80'}" alt="${b.caption || ''}" loading="lazy">
+            <div class="image-caption">${b.caption || 'Caption'}</div>`;
+          break;
+        }
+        case 'quote': {
+          inner = document.createElement('blockquote');
+          inner.style.cssText = 'border-left:3px solid var(--accent);padding-left:20px;margin:4px 0;';
+          inner.innerHTML = `<p style="font-size:18px;font-style:italic;color:var(--text);margin-bottom:4px">${parseInline(b.text || '')}</p><cite style="font-family:var(--font-display);font-size:12px;color:var(--muted)">${b.attribution || ''}</cite>`;
+          break;
+        }
+        case 'table': {
+          inner = document.createElement('div');
+          inner.style.cssText = 'overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);';
+          const t = document.createElement('table');
+          t.style.cssText = 'width:100%;border-collapse:collapse;font-family:var(--font-display);font-size:13px;';
+          const thead = `<thead><tr>${(b.headers||[]).map(h=>`<th style="padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);color:var(--muted);font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-size:11px">${h}</th>`).join('')}</tr></thead>`;
+          const rows = (b.rows||[]).map(row=>`<tr>${row.map(cell=>`<td style="padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text)">${cell}</td>`).join('')}</tr>`).join('');
+          t.innerHTML = thead + `<tbody>${rows}</tbody>`;
+          inner.appendChild(t);
+          break;
+        }
+        case 'timeline': {
+          inner = document.createElement('div');
+          inner.style.cssText = 'display:flex;gap:12px;align-items:flex-start;padding:8px 0;';
+          inner.innerHTML = `<div style="font-family:var(--font-mono);font-size:11px;color:var(--accent);background:rgba(200,240,96,.08);border:1px solid rgba(200,240,96,.2);border-radius:4px;padding:4px 10px;white-space:nowrap">${b.date||'2024-01-01'}</div>
+            <div style="font-family:var(--font-body);color:var(--text);padding-top:2px">${parseInline(b.label||'Timeline event')}</div>`;
+          break;
+        }
+        case 'book': {
+          inner = document.createElement('div');
+          inner.style.cssText = 'display:flex;gap:12px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;';
+          inner.innerHTML = `<span style="font-size:24px">📚</span><div><div style="font-family:var(--font-display);font-weight:700;font-size:14px;color:var(--text)">${b.title||'Book Title'}</div><div style="font-family:var(--font-display);font-size:12px;color:var(--muted)">${b.author||'Author'}</div></div>`;
+          break;
+        }
+        case 'toggle': {
+          inner = document.createElement('details');
+          inner.style.cssText = 'border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;';
+          inner.innerHTML = `<summary style="padding:10px 14px;font-family:var(--font-display);font-size:14px;font-weight:600;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;color:var(--text)"><span>▸</span>${b.summary||'Toggle'}</summary>
+            <div style="padding:12px 14px;font-family:var(--font-body);font-size:15px;color:var(--text);border-top:1px solid var(--border)">${parseInline(b.text||'')}</div>`;
+          break;
+        }
+        default: {
+          inner.innerHTML = `<span style="font-family:var(--font-display);font-size:12px;color:var(--muted)">[${b.type} block]</span>`;
+        }
+      }
+
+      // Delete button (editor mode)
+      if (!isViewer && b.type !== 'divider') {
+        const del = document.createElement('button');
+        del.textContent = '×';
+        del.style.cssText = 'position:absolute;right:-28px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:18px;opacity:0;transition:opacity .15s;padding:4px;';
+        wrap.addEventListener('mouseenter', () => del.style.opacity = '1');
+        wrap.addEventListener('mouseleave', () => del.style.opacity = '0');
+        del.addEventListener('click', () => removeBlockById(b.id));
+        wrap.appendChild(del);
+      }
+
+      wrap.appendChild(inner);
+      canvas.appendChild(wrap);
+    });
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function updateJSON() {
+    const panel = document.getElementById('json-panel');
+    const doc = {
+      id: 'doc_' + 'griot',
+      blocks: blocks.map(b => ({ id: b.id, type: b.type, ...(b.text !== undefined ? { text: b.text } : {}), meta: {} }))
+    };
+    panel.textContent = JSON.stringify(doc, null, 2);
+  }
+
+  // ── View toggle ────────────────────────────────
+  function setView(mode) {
+    viewMode = mode;
+    document.querySelectorAll('.tb-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    renderBlocks();
+  }
+
+  // ── Slash Menu ─────────────────────────────────
+  let slashMenu = null;
+
+  function showSlashMenu(wrap, blockId) {
+    closeSlashMenu();
+    const menu = document.createElement('div');
+    menu.className = 'slash-menu open';
+
+    const items = [
+      { type: 'h1', icon: 'H1', label: 'Heading 1', desc: 'Large section heading' },
+      { type: 'h2', icon: 'H2', label: 'Heading 2', desc: 'Medium section heading' },
+      { type: 'callout', icon: '💡', label: 'Callout', desc: 'Highlight important info' },
+      { type: 'code', icon: '⌨', label: 'Code', desc: 'Code block with syntax' },
+      { type: 'list', icon: '≡', label: 'List', desc: 'Bulleted list' },
+      { type: 'divider', icon: '—', label: 'Divider', desc: 'Horizontal rule' },
+      { type: 'image', icon: '🖼', label: 'Image', desc: 'Embed an image' },
+      { type: 'quote', icon: '"', label: 'Quote', desc: 'Blockquote' },
+    ];
+
+    items.forEach((item, i) => {
+      const div = document.createElement('div');
+      div.className = 'slash-item' + (i === 0 ? ' selected' : '');
+      div.innerHTML = `<div class="slash-icon">${item.icon}</div><div class="slash-info"><h4>${item.label}</h4><p>${item.desc}</p></div>`;
+      div.addEventListener('click', () => {
+        insertBlock(item.type);
+        closeSlashMenu();
+      });
+      menu.appendChild(div);
+    });
+
+    wrap.style.position = 'relative';
+    wrap.appendChild(menu);
+    slashMenu = menu;
+
+    setTimeout(() => {
+      document.addEventListener('click', closeSlashMenu, { once: true });
+    }, 0);
+  }
+
+  function closeSlashMenu() {
+    if (slashMenu) { slashMenu.remove(); slashMenu = null; }
+  }
+
+  // ── Code tabs ─────────────────────────────────
+  function switchTab(name) {
+    document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.code-snippet').forEach(s => s.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('tab-' + name).classList.add('active');
+  }
+
+  // ── Block gallery ─────────────────────────────
+  function renderGallery() {
+    const gallery = document.getElementById('block-gallery');
+    BLOCK_TYPES.forEach(bt => {
+      const pill = document.createElement('div');
+      pill.className = 'block-pill';
+      pill.innerHTML = `<span class="pill-icon">${bt.icon}</span><div><div class="pill-name">${bt.label}</div><div class="pill-cat">${bt.cat}</div></div>`;
+      pill.addEventListener('click', () => {
+        document.getElementById('demo').scrollIntoView({ behavior: 'smooth' });
+        setTimeout(() => insertBlock(bt.type), 500);
+      });
+      gallery.appendChild(pill);
+    });
+  }
+
+  // ── Intersection observer for fade-up ──────────
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); } });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+  // ── Init ──────────────────────────────────────
+  renderGallery();
+  loadSample();
+</script>
+</body>
+</html>

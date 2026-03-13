@@ -1,32 +1,26 @@
 // ─── Griot.js ─────────────────────────────────────────────────────────────────
-// Public facade. Import from here — never from internal modules directly.
+// Public facade. Import from here only — never from internal modules directly.
 //
-// Named exports cover every public surface:
-//
-//   Classes
-//     Editor, Viewer
-//
-//   Document model
-//     createDocument, createBlock, cloneBlock
-//     updateBlock, insertBlockAfter, insertBlockBefore,
-//     removeBlock, splitBlock, mergeBlockWithPrev, moveBlock,
-//     getBlock, getBlockIndex, toJSON, fromJSON
-//
-//   Block helpers
-//     anchorId, scrollToBlock, isTextBlock
-//
-//   Inline
-//     tokenizeInline, renderInlineToDOM, renderInlineToHTML, TOKEN
-//
-//   Schema
-//     getBlockDef, getAllTypes, defaultMeta, BlockSchema
+//   Classes       Editor, Viewer, FormatToolbar, SlashMenu, DropHandler
+//   Document      createDocument, createBlock, cloneBlock
+//                 updateBlock, insertBlockAfter, insertBlockBefore,
+//                 removeBlock, moveBlock, splitBlock, mergeBlockWithPrev,
+//                 getBlock, getBlockIndex, getBlockBefore, getBlockAfter,
+//                 toJSON, fromJSON
+//   Block         anchorId, scrollToBlock, isTextBlock, isValidBlock
+//                 TEXT_TYPES, ALL_TYPES
+//   Inline        tokenizeInline, renderInlineToDOM, renderInlineToHTML,
+//                 escHtml, escAttr, TOKEN
+//   Schema        getBlockDef, getAllTypes, getTypesByCategory,
+//                 defaultMeta, BlockSchema
+//   Keyboard      attachKeyboardHandler, getCursorOffset, getSelectionOffsets,
+//                 setCursorOffset, focusAtEnd, focusAtStart
+//   URL helpers   resolveYouTube, resolveVimeo, resolveSpotify, resolveSoundCloud
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Core
 export {
   createBlock, cloneBlock, isTextBlock, isValidBlock,
-  anchorId, scrollToBlock,
-  TEXT_TYPES, ALL_TYPES,
+  anchorId, scrollToBlock, TEXT_TYPES, ALL_TYPES,
 } from './core/Block.js';
 
 export {
@@ -38,17 +32,21 @@ export {
 
 export { History } from './core/History.js';
 
-// Inline
-export { tokenizeInline, TOKEN } from './inline/InlineLexer.js';
+export { tokenizeInline, TOKEN }               from './inline/InlineLexer.js';
+export { renderInlineToDOM, renderInlineToHTML, escHtml, escAttr } from './inline/InlineRenderer.js';
+
+export { getBlockDef, getAllTypes, getTypesByCategory, defaultMeta } from './blocks/BlockSchema.js';
+export { default as BlockSchema }               from './blocks/BlockSchema.js';
+export { renderBlock, resolveYouTube, resolveVimeo, resolveSpotify, resolveSoundCloud } from './blocks/BlockRenderer.js';
+
+export { Editor }         from './editor/Editor.js';
+export { FormatToolbar }  from './editor/FormatToolbar.js';
+export { SlashMenu }      from './editor/SlashMenu.js';
+export { DropHandler }    from './editor/DropHandler.js';
 export {
-  renderInlineToDOM, renderInlineToHTML, escHtml, escAttr,
-} from './inline/InlineRenderer.js';
+  attachKeyboardHandler,
+  getCursorOffset, getSelectionOffsets, setCursorOffset,
+  focusAtEnd, focusAtStart,
+} from './editor/Keyboard.js';
 
-// Blocks
-export { getBlockDef, getAllTypes, defaultMeta }    from './blocks/BlockSchema.js';
-export { default as BlockSchema }                  from './blocks/BlockSchema.js';
-export { renderBlock }                             from './blocks/BlockRenderer.js';
-
-// Editor / Viewer
-export { Editor }  from './editor/Editor.js';
-export { Viewer }  from './viewer/Viewer.js';
+export { Viewer } from './viewer/Viewer.js';

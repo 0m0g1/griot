@@ -1,179 +1,374 @@
 # Griot
 
-A self-contained block-based rich text editor and renderer.  
-Built for structured historical document authoring — works standalone or embedded inside a larger app.
+A lightweight, extensible block editor and viewer for the web. Inspired by Notion, but built with plain JavaScript and zero dependencies. Griot provides a rich editing experience with:
+
+- **Block-based editing** – paragraphs, headings, lists, callouts, code blocks, images, video, audio, tables, dividers, timeline references, book citations, and more.
+- **Inline formatting** – bold, italic, underline, strikethrough, inline code, highlights, colored text, links, images, and custom event/cite chips.
+- **Slash commands** – type `/` to insert any block.
+- **Floating format toolbar** – appears when you select text.
+- **Undo/redo** – with a built‑in history stack.
+- **Read‑only viewer** – render the same document without editing controls.
+- **Immutable document operations** – every change produces a new document object.
+- **Schema‑driven** – all block types are defined in a single schema; easy to extend.
 
 ---
 
-## Install
+## Installation
 
 ```bash
-# Copy src/ into your project, or:
-npm install griot   # (once published)
+npm install griot
 ```
 
-```js
-import '@0m0g1/griot/css';                         // styles
-import { Editor, Viewer, createDocument } from 'griot';
+Or include it directly via ES module:
+
+```html
+<script type="module">
+  import { Editor, Viewer } from './path/to/griot.js';
+  // ...
+</script>
 ```
 
 ---
 
-## Quick start
+## Quick Start
 
 ### Editor
 
-```js
-import { Editor, createDocument } from 'griot';
-import '@0m0g1/griot/css';
+```html
+<div id="editor-container"></div>
+<script type="module">
+  import { Editor, createDocument } from 'griot';
 
-const doc = createDocument('My Article');
+  const container = document.getElementById('editor-container');
+  const doc = createDocument([
+    { id: 'b1', type: 'heading', text: 'Hello World', meta: { level: 1 } },
+    { id: 'b2', type: 'paragraph', text: 'This is **editable** content.' },
+  ]);
 
-const editor = new Editor(document.querySelector('#editor'), {
-  doc,
-  books: [],                         // optional: parsed books for citations
-  onChange(updatedDoc) {
-    localStorage.setItem('draft', JSON.stringify(updatedDoc));
-  },
-  onEventClick(eventId) {
-    // e.g. AppShell.handleSelectItemById(eventId)
-    console.log('Open timeline event:', eventId);
-  },
-  onCiteClick(blockId) {
-    // scroll viewer to that block
-    viewer.setHighlight(blockId);
-  },
-  onRequestBookPicker(blockId, callback) {
-    // Open your SourcePicker UI, then call:
-    // callback({ bookId, unitId, quote, note })
-  },
-});
+  const editor = new Editor(container, {
+    doc,
+    books: [],                     // optional, for book citations
+    onChange: (newDoc) => {
+      console.log('Document changed:', newDoc);
+    },
+    onEventClick: (eventId) => {
+      console.log('Event clicked:', eventId);
+    },
+    onCiteClick: (blockId) => {
+      console.log('Citation clicked:', blockId);
+    },
+    onRequestBookPicker: (blockId, callback) => {
+      // Open your own book picker UI, then call callback with selection
+      callback({ bookId: 'book1', unitId: 'unit1', quote: '', note: '' });
+    }
+  });
+
+  // Later, if you need to replace the document:
+  editor.setDoc(newDoc);
+</script>
 ```
 
 ### Viewer
 
-```js
-import { Viewer } from 'griot';
+```html
+<div id="viewer-container"></div>
+<script type="module">
+  import { Viewer } from 'griot';
 
-const viewer = new Viewer(document.querySelector('#viewer'), {
-  doc,
-  books: [],
-  onEventClick(eventId) {
-    console.log('Open event:', eventId);
-  },
-});
+  const container = document.getElementById('viewer-container');
+  const viewer = new Viewer(container, {
+    doc: myDocument,
+    books: myBooks,
+    onEventClick: (eventId) => { /* ... */ },
+    onCiteClick: (blockId) => { /* ... */ },
+    highlightBlockId: 'b2'      // optional initial highlight
+  });
 
-// Jump to a block (e.g. from a timeline citation)
-viewer.setHighlight('b_abc123');
+  // Highlight and scroll to a block
+  viewer.setHighlight('b1');
+</script>
 ```
 
 ---
 
-## Block types
+## Concepts
 
-| Type | Icon | Text field | Notes |
-|---|---|---|---|
-| `paragraph` | ¶ | ✓ | Inline syntax supported |
-| `heading` | H | ✓ | `meta.level` 1–6 |
-| `blockquote` | ❝ | ✓ | Inline syntax supported |
-| `callout` | 💡 | ✓ | `meta.icon` for the emoji |
-| `code` | </> | ✓ | No inline parsing. `meta.language` for highlight |
-| `divider` | — | — | Horizontal rule |
-| `image` | 🖼 | — | `meta.src`, `meta.alt`, `meta.caption` |
-| `timeline_ref` | ⏱ | — | `meta.eventId`, `meta.eventTitle`, `meta.note` |
-| `book_citation` | 📖 | — | `meta.bookId`, `meta.unitId`, `meta.quote`, `meta.note` |
+### Document
 
----
+A Griot document is a plain object with an `id` and an array of blocks:
 
-## Inline syntax
-
-Works inside any block with `hasInline: true` (paragraph, blockquote, callout, note fields):
-
-```
-**bold**
-*italic*
-`inline code`
-[link text](https://example.com)
-[[event:rome_founding|The Founding of Rome]]   → timeline event chip
-[[cite:b_abc123|See Chapter 2]]                → citation cross-reference
-```
-
----
-
-## Document format (`.griot.json`)
-
-```json
-{
-  "version": 1,
-  "id": "doc_abc",
-  "title": "The Fall of Rome",
-  "createdAt": "2025-01-01T00:00:00.000Z",
-  "updatedAt": "2025-01-01T00:00:00.000Z",
-  "blocks": [
-    { "id": "b_1", "type": "heading",   "text": "The Fall of Rome",  "meta": { "level": 1 } },
-    { "id": "b_2", "type": "paragraph", "text": "In **476 CE** the last emperor [[event:fall_of_rome|was deposed]].", "meta": {} },
-    { "id": "b_3", "type": "book_citation", "text": null, "meta": {
-        "bookId": "book_xyz", "unitId": "unit_abc",
-        "quote": "The barbarians had long served in Roman armies.",
-        "note": "Essential context for understanding the transition."
-    }}
-  ]
+```typescript
+interface Document {
+  id: string;
+  blocks: Block[];
 }
 ```
 
----
+### Block
 
-## Deep-link anchors
+Every block has at least `id`, `type`, and optionally `text` and `meta`. The `text` field is only present for block types that contain editable text (e.g. paragraphs, headings). All other block types store their data in `meta`.
 
-Every rendered block gets `id="griot-{blockId}"` in the DOM.
-
-```js
-import { anchorId, scrollToBlock } from 'griot';
-
-// Get the DOM id for a block
-anchorId('b_abc123')          // → "griot-b_abc123"
-
-// Scroll to a block (viewer or editor)
-scrollToBlock('b_abc123');
-scrollToBlock('b_abc123', 'instant');
+```typescript
+interface Block {
+  id: string;
+  type: string;
+  text?: string | null;
+  meta: Record<string, any>;
+}
 ```
 
-This is the contract for timeline → article navigation:  
-store `{ docId, blockId }` on a citation, then call `scrollToBlock(blockId)` when the timeline jumps to it.
+### Inline Markup
+
+Within text blocks, you can use lightweight syntax:
+
+| Syntax | Result |
+|---|---|
+| `**bold**` | **bold** |
+| `*italic*` | *italic* |
+| `__underline__` | underline |
+| `~~strikethrough~~` | ~~strikethrough~~ |
+| `` `code` `` | `code` |
+| `==highlight==` | highlight |
+| `{#ff0000:red text}` or `{blue:text}` | colored text |
+| `[link text](https://example.com)` | link |
+| `![alt text](image.jpg)` | image |
+| `[[event:eventId\|label]]` | clickable chip → `onEventClick` |
+| `[[cite:blockId\|label]]` | clickable chip → `onCiteClick` |
+
+The inline parser is fully independent and can be used separately: `tokenizeInline()`, `renderInlineToDOM()`, `renderInlineToHTML()`.
+
+### Block Schema
+
+All block types are defined in `BlockSchema.js`. Each definition includes category, label, icon, slash label, whether it has text, default meta, and placeholder. You can extend the schema by adding new entries.
+
+### History
+
+The `History` class provides a simple linear undo/redo stack. The editor uses it internally; you can also use it standalone.
 
 ---
 
-## API reference
+## API Reference
 
-### `Editor`
-| Method | Description |
+The public API is exposed through the main entry point (`griot.js`). Below are the most important exports.
+
+### Core
+
+| Export | Description |
 |---|---|
-| `new Editor(el, options)` | Mount editor into `el` |
-| `editor.doc` | Current document (read-only) |
-| `editor.setDoc(doc)` | Replace document |
-| `editor.setBooks(books)` | Update available books |
-| `editor.focus(blockId)` | Focus a specific block |
-| `editor.destroy()` | Unmount and clean up |
+| `createBlock(type, overrides?)` | Create a new block with a unique id. |
+| `cloneBlock(block, newId = true)` | Deep clone a block. |
+| `isTextBlock(block)` | Check if a block stores a text string. |
+| `isValidBlock(block)` | Minimal structural check. |
+| `anchorId(blockId)` | Generate the DOM id used for a block element. |
+| `scrollToBlock(blockId, behavior = 'smooth')` | Scroll to a block's element. |
+| `TEXT_TYPES` | Set of block types that have a text field. |
+| `ALL_TYPES` | Array of all known block type names. |
 
-### `Viewer`
-| Method | Description |
+### Document Operations
+
+All functions are immutable – they return a new document.
+
+| Export | Description |
 |---|---|
-| `new Viewer(el, options)` | Mount viewer into `el` |
-| `viewer.setDoc(doc)` | Replace document |
-| `viewer.setBooks(books)` | Update available books |
-| `viewer.setHighlight(blockId)` | Scroll to + briefly highlight a block |
-| `viewer.destroy()` | Unmount and clean up |
+| `createDocument(blocks?)` | Create a new document (with at least one paragraph). |
+| `toJSON(doc)` / `fromJSON(json)` | Serialize / deserialize. |
+| `getBlock(doc, id)` | Find a block by id. |
+| `getBlockIndex(doc, id)` | Get index of a block. |
+| `getBlockBefore(doc, id)` / `getBlockAfter(doc, id)` | Adjacent blocks. |
+| `updateBlock(doc, id, patch)` | Update text and/or meta. |
+| `insertBlockAfter(doc, afterId, newBlock)` | Insert block. |
+| `insertBlockBefore(doc, beforeId, newBlock)` | Insert block. |
+| `removeBlock(doc, id)` | Delete a block. |
+| `moveBlock(doc, fromIdx, toIdx)` | Reorder blocks. |
+| `splitBlock(doc, blockId, offset)` | Split a text block at offset. |
+| `mergeBlockWithPrev(doc, blockId)` | Merge block into previous one. |
 
-### Document helpers
-```js
-createDocument(title)
-createBlock(type, overrides)
-updateBlock(doc, blockId, patch)
-insertBlockAfter(doc, blockId, newBlock)
-removeBlock(doc, blockId)
-splitBlock(doc, blockId, offset)         // returns [newDoc, newBlockId]
-mergeBlockWithPrev(doc, blockId)         // returns [newDoc, prevId, offset]
-moveBlock(doc, fromIndex, toIndex)
-toJSON(doc)
-fromJSON(jsonStringOrObject)
+### Inline Parsing & Rendering
+
+| Export | Description |
+|---|---|
+| `tokenizeInline(text)` | Return an array of token objects. |
+| `renderInlineToDOM(text, callbacks?)` | Render tokens into a DocumentFragment. |
+| `renderInlineToHTML(text)` | Render tokens into an HTML string. |
+| `escHtml(str)` / `escAttr(str)` | Escape helpers. |
+| `TOKEN` | Enum of token types. |
+
+### Block Rendering (for Viewer or custom use)
+
+| Export | Description |
+|---|---|
+| `renderBlock(block, options)` | Render a single block to a DOM element. Used by Viewer. |
+| `getBlockDef(type)` | Get the schema definition for a block type. |
+| `getAllTypes()` | All registered block type names. |
+| `getTypesByCategory(category)` | Filter types by category. |
+| `defaultMeta(type)` | Get default meta for a type. |
+| `resolveYouTube(src)` / `resolveVimeo` / `resolveSpotify` / `resolveSoundCloud` | Extract embed URLs from various sources. |
+
+### Editor Classes
+
+| Export | Description |
+|---|---|
+| `Editor` | Main editor class. See constructor options below. |
+| `FormatToolbar` | Floating formatting toolbar (used internally, but can be used standalone). |
+| `SlashMenu` | Slash command menu (used internally). |
+| `DropHandler` | Handles drag & drop of files/images (not yet shown, but exported). |
+
+**Editor constructor options:**
+
+```typescript
+{
+  doc: Document;                       // initial document
+  books?: Book[];                      // array of book objects for citations
+  onChange?: (doc: Document) => void;  // called after every change (debounced)
+  onEventClick?: (eventId: string) => void;
+  onCiteClick?: (blockId: string) => void;
+  onRequestBookPicker?: (blockId: string, callback: (selection) => void) => void;
+}
 ```
+
+**Editor methods:**
+
+- `setDoc(doc)` – replace the document.
+- `setBooks(books)` – update the book list.
+- `focus(blockId)` – focus a specific block.
+- `destroy()` – clean up.
+
+### Viewer
+
+| Export | Description |
+|---|---|
+| `Viewer` | Read‑only renderer. |
+
+**Viewer constructor options:**
+
+```typescript
+{
+  doc?: Document;
+  books?: Book[];
+  onEventClick?: (eventId: string) => void;
+  onCiteClick?: (blockId: string) => void;
+  highlightBlockId?: string;           // initial highlight
+}
+```
+
+**Viewer methods:**
+
+- `setDoc(doc)`
+- `setBooks(books)`
+- `setHighlight(blockId, options?)` – scroll to and briefly highlight a block.
+- `destroy()`
+
+### Keyboard Helpers
+
+| Export | Description |
+|---|---|
+| `attachKeyboardHandler(el, blockId, callbacks)` | Attach editor keyboard shortcuts to a contenteditable element. |
+| `getCursorOffset(el)` / `setCursorOffset(el, offset)` | Get/set caret position by character offset. |
+| `getSelectionOffsets(el)` | Get start/end offsets of current selection. |
+| `focusAtEnd(el)` / `focusAtStart(el)` | Move caret to end/start. |
+
+### History
+
+```javascript
+import { History } from 'griot';
+
+const history = new History(initialDoc);
+history.push(newDoc);
+history.undo();  // returns previous document
+history.redo();
+history.current; // current document
+```
+
+---
+
+## Styling
+
+Griot includes no CSS by design – you can style it to match your application. All elements have semantic class names prefixed with `griot-`. For a quick start, you can copy the example styles from the test page or browse the class names used in the source.
+
+**Minimal recommended styles:**
+
+- Make `.griot-editor-block__input[contenteditable]` look like a normal block.
+- Add basic spacing and borders.
+- Style the floating toolbar and slash menu as floating cards.
+
+---
+
+## Examples
+
+### Basic Editor with Slash Menu and Toolbar
+
+The editor includes the slash menu and format toolbar automatically. Just instantiate it.
+
+### Using the Viewer with Highlight
+
+```javascript
+const viewer = new Viewer(container, { doc });
+viewer.setHighlight('some-block-id');
+```
+
+### Custom Book Picker
+
+When a `book_citation` block is added, the editor calls `onRequestBookPicker`. Implement your own modal or dropdown:
+
+```javascript
+onRequestBookPicker: (blockId, callback) => {
+  const book = prompt('Enter book ID:');
+  const unit = prompt('Enter unit ID:');
+  callback({ bookId: book, unitId: unit, quote: '', note: '' });
+}
+```
+
+### Using Inline Renderer Standalone
+
+```javascript
+import { renderInlineToDOM } from 'griot';
+
+const text = 'This is **bold** and [a link](https://example.com).';
+const fragment = renderInlineToDOM(text, {
+  onEventClick: (id) => console.log(id),
+  onCiteClick: (id) => console.log(id)
+});
+document.getElementById('output').appendChild(fragment);
+```
+
+---
+
+## Extending
+
+### Adding a New Block Type
+
+1. Add an entry in `BlockSchema.js` (or patch the schema at runtime).
+2. Add a rendering case in `BlockRenderer.js`.
+3. If the block has a special editor UI, add a case in `Editor._buildSpecialBlockUI()`.
+4. (Optional) Add support in the slash menu – it reads from the schema automatically.
+
+### Custom Inline Syntax
+
+Modify `InlineLexer.js` by adding a new rule. Then update `InlineRenderer.js` to render the new token type.
+
+---
+
+## Development
+
+```bash
+git clone https://github.com/yourname/griot.git  
+cd griot
+npm install
+npm run dev   # serves test page at localhost:5000 (or similar)
+```
+
+The source is organised as:
+
+- `src/core/` – block primitives, document operations, history.
+- `src/blocks/` – block schema and renderer.
+- `src/inline/` – inline lexer and renderer.
+- `src/editor/` – editor UI, keyboard handling, slash menu, toolbar.
+- `src/viewer/` – read-only renderer.
+
+All public exports are aggregated in `src/griot.js`.
+
+---
+
+## License
+
+MIT
