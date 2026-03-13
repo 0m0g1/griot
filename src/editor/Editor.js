@@ -28,6 +28,7 @@ import {
   focusAtEnd, focusAtStart,
 } from './Keyboard.js';
 import { FormatToolbar }                                  from './FormatToolbar.js';
+import { DropHandler }                                   from './DropHandler.js';
 import { renderInlineToDOM }                             from '../inline/InlineRenderer.js';
 
 const TYPING_DEBOUNCE_MS = 400;
@@ -76,6 +77,14 @@ export class Editor {
       onLink:  ()       => this._insertLink(),
       onColor: ()       => this._insertColor(),
     });
+
+    // Drag-and-drop file handler
+    this._drop = new DropHandler(container, {
+      getDoc:    ()    => this._doc,
+      onCommit:  (doc) => this._commit(doc),
+      onUpload:  options.onUpload  ?? undefined,
+      uploadUrl: options.uploadUrl ?? undefined,
+    });
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
@@ -101,6 +110,7 @@ export class Editor {
   destroy() {
     clearTimeout(this._typingTimer);
     this._toolbar.destroy();
+    this._drop.destroy();
     this._container.innerHTML = '';
     this._container.classList.remove('griot-editor');
     this._blockEls.clear();
