@@ -11,7 +11,7 @@
 // layouts: 'grid' | 'masonry' | 'carousel' | 'strip'
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { lightbox } from '../viewer/Lightbox.js';
+import { lightbox } from './Lightbox.js';
 
 const VALID_LAYOUTS = new Set(['grid', 'masonry', 'carousel', 'strip']);
 
