@@ -16,6 +16,7 @@
 //   Keyboard      attachKeyboardHandler, getCursorOffset, getSelectionOffsets,
 //                 setCursorOffset, focusAtEnd, focusAtStart
 //   URL helpers   resolveYouTube, resolveVimeo, resolveSpotify, resolveSoundCloud
+//   Gallery       renderGallery, lightbox
 // ─────────────────────────────────────────────────────────────────────────────
 
 export {
@@ -38,6 +39,8 @@ export { renderInlineToDOM, renderInlineToHTML, escHtml, escAttr } from './inlin
 export { getBlockDef, getAllTypes, getTypesByCategory, defaultMeta } from './blocks/BlockSchema.js';
 export { default as BlockSchema }               from './blocks/BlockSchema.js';
 export { renderBlock, resolveYouTube, resolveVimeo, resolveSpotify, resolveSoundCloud } from './blocks/BlockRenderer.js';
+export { renderGallery }                        from './blocks/GalleryRenderer.js';
+export { lightbox }                             from './blocks/Lightbox.js';
 
 export { Editor }         from './editor/Editor.js';
 export { FormatToolbar }  from './editor/FormatToolbar.js';
