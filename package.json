@@ -1,6 +1,6 @@
 {
   "name": "@0m0g1/griot",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "A self-contained block-based rich text editor and renderer built for historical document authoring.",
   "type": "module",
   "main": "./src/Griot.js",
