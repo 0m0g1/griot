@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { tokenizeInline, TOKEN } from './InlineLexer.js';
+import { lightbox }              from '../blocks/Lightbox.js';
 
 // ── DOM rendering ─────────────────────────────────────────────────────────────
 
@@ -68,6 +69,8 @@ function _toNode(t, opts) {
       el.src = t.src;
       el.alt = t.alt ?? '';
       el.className = 'griot-inline-img';
+      el.style.cursor = 'zoom-in';
+      el.addEventListener('click', () => lightbox.open([{ src: t.src, alt: t.alt, caption: t.alt }], 0));
       return el;
     }
     case TOKEN.LINK: {
@@ -119,7 +122,7 @@ function _toHTML(t) {
     case TOKEN.HIGHLIGHT:  return `<mark class="griot-highlight">${escHtml(t.text)}</mark>`;
     case TOKEN.COLOR_MARK: return `<span class="griot-color-mark" style="color:${escAttr(t.color)}">${escHtml(t.text)}</span>`;
     case TOKEN.CODE:       return `<code class="griot-inline-code">${escHtml(t.code)}</code>`;
-    case TOKEN.IMAGE:      return `<img class="griot-inline-img" src="${escAttr(t.src)}" alt="${escAttr(t.alt ?? '')}">`;
+    case TOKEN.IMAGE:      return `<img class="griot-inline-img" src="${escAttr(t.src)}" alt="${escAttr(t.alt ?? '')}" style="cursor:zoom-in">`;
     case TOKEN.LINK:       return `<a class="griot-link" href="${escAttr(t.href)}" target="_blank" rel="noopener noreferrer">${escHtml(t.label)}</a>`;
     case TOKEN.EVENT_REF:  return `<button type="button" class="griot-chip griot-chip--event" data-event-id="${escAttr(t.eventId)}"><span class="griot-chip__icon">⏱</span><span class="griot-chip__label">${escHtml(t.label)}</span></button>`;
     case TOKEN.CITE_REF:   return `<button type="button" class="griot-chip griot-chip--cite" data-block-id="${escAttr(t.blockId)}"><span class="griot-chip__icon">📖</span><span class="griot-chip__label">${escHtml(t.label)}</span></button>`;

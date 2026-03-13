@@ -18,7 +18,7 @@ import { createBlock, isTextBlock, anchorId }            from '../core/Block.js'
 import {
   updateBlock, splitBlock, mergeBlockWithPrev,
   insertBlockAfter, removeBlock, getBlockIndex,
-  getBlockBefore, getBlockAfter, moveBlock,
+  getBlock, getBlockBefore, getBlockAfter, moveBlock,
 } from '../core/Document.js';
 import { History }                                        from '../core/History.js';
 import { getBlockDef, getAllTypes, defaultMeta }          from '../blocks/BlockSchema.js';
@@ -32,6 +32,7 @@ import { DropHandler }                                   from './DropHandler.js'
 import { renderInlineToDOM }                             from '../inline/InlineRenderer.js';
 
 const TYPING_DEBOUNCE_MS = 400;
+const UPLOAD_URL_DEFAULT  = '/api/upload/insight-media';
 
 // Block types where Enter inserts a newline instead of splitting the block
 const LIST_TYPES = new Set(['list_ul', 'list_ol']);
@@ -51,6 +52,7 @@ const BLOCK_SHORTCUTS = [
   { re: /^--- /,    type: 'divider',   strip: 4, clearText: true },
   { re: /^``` /,    type: 'code',      strip: 4 },
   { re: /^```$/,    type: 'code',      strip: 3 },
+  { re: /^\[\] /,   type: 'checklist', strip: 3, clearText: true },
 ];
 
 // Inline format-key → markdown syntax
@@ -169,7 +171,8 @@ export class Editor {
 
       editable.textContent = block.text ?? '';
 
-      editable.addEventListener('input', () => this._onInput(block.id, editable));
+      editable.addEventListener('input',  () => this._onInput(block.id, editable));
+      editable.addEventListener('paste',  (e) => this._onPaste(block.id, editable, e));
       editable.addEventListener('focus', () => {
         this._focusedId = block.id;
         this._focusedEl = editable;
@@ -324,8 +327,7 @@ export class Editor {
       case 'image': {
         if (block.meta?.src) {
           const img = document.createElement('img');
-          img.src = block.meta.src;
-          img.alt = block.meta.alt ?? '';
+          img.src = block.meta.src; img.alt = block.meta.alt ?? '';
           img.className = 'griot-editor-block__img-preview';
           wrap.appendChild(img);
         }
@@ -340,30 +342,285 @@ export class Editor {
         break;
       }
 
+      case 'gallery': {
+        const items  = Array.isArray(block.meta?.items)  ? block.meta.items  : [];
+        const layout = block.meta?.layout ?? 'grid';
+
+        if (items.length) {
+          const thumbs = document.createElement('div');
+          thumbs.className = 'griot-editor-gallery__thumbs';
+          items.forEach((item, i) => {
+            const thumb = document.createElement('div');
+            thumb.className = `griot-editor-gallery__thumb${item._uploading ? ' is-uploading' : ''}`;
+            if (item._uploading) {
+              thumb.innerHTML = `<div class="griot-editor-gallery__thumb-spinner"></div>`;
+            } else {
+              const img = document.createElement('img');
+              img.src = item.src ?? item.url ?? ''; img.alt = item.alt ?? item.alt_text ?? '';
+              thumb.appendChild(img);
+              const cap = document.createElement('input');
+              cap.type = 'text'; cap.className = 'griot-editor-gallery__thumb-caption';
+              cap.placeholder = 'Caption…'; cap.value = item.caption ?? '';
+              cap.addEventListener('input', () => {
+                const b = getBlock(this._doc, block.id);
+                const its = Array.isArray(b?.meta?.items) ? b.meta.items : [];
+                const next = its.map((it, j) => j === i ? { ...it, caption: cap.value } : it);
+                this._doc = updateBlock(this._doc, block.id, { meta: { items: next } });
+                this._history.replace(this._doc);
+                clearTimeout(this._typingTimer);
+                this._typingTimer = setTimeout(() => { this._history.push(this._doc); this._emit(); }, TYPING_DEBOUNCE_MS);
+              });
+              thumb.appendChild(cap);
+              const remove = document.createElement('button');
+              remove.type = 'button'; remove.className = 'griot-editor-gallery__thumb-remove';
+              remove.textContent = '×'; remove.title = 'Remove';
+              remove.addEventListener('click', () => {
+                const b = getBlock(this._doc, block.id);
+                const next = (b?.meta?.items ?? []).filter((_, j) => j !== i);
+                this._commit(updateBlock(this._doc, block.id, { meta: { items: next } }));
+              });
+              thumb.appendChild(remove);
+            }
+            thumbs.appendChild(thumb);
+          });
+          wrap.appendChild(thumbs);
+        }
+
+        const addRow = document.createElement('div');
+        addRow.className = 'griot-editor-gallery__add-row';
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file'; fileInput.accept = 'image/*'; fileInput.multiple = true; fileInput.style.display = 'none';
+        fileInput.addEventListener('change', async (e) => {
+          const files = [...(e.target.files ?? [])]; e.target.value = '';
+          if (files.length) await this._galleryUpload(block.id, files);
+        });
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button'; addBtn.className = 'griot-editor-block__pick-btn';
+        addBtn.textContent = '+ Upload images'; addBtn.addEventListener('click', () => fileInput.click());
+        const urlInput = document.createElement('input');
+        urlInput.type = 'url'; urlInput.className = 'griot-editor-block__meta-input';
+        urlInput.placeholder = 'Image URL…'; urlInput.style.flex = '1';
+        const addUrlBtn = document.createElement('button');
+        addUrlBtn.type = 'button'; addUrlBtn.className = 'griot-editor-block__pick-btn';
+        addUrlBtn.textContent = '+ Add URL';
+        addUrlBtn.addEventListener('click', () => {
+          const url = urlInput.value.trim(); if (!url) return;
+          const b = getBlock(this._doc, block.id);
+          const next = [...(b?.meta?.items ?? []), { src: url, url, alt: '', caption: '' }];
+          this._commit(updateBlock(this._doc, block.id, { meta: { items: next } }));
+          urlInput.value = '';
+        });
+        urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addUrlBtn.click(); });
+        addRow.append(fileInput, addBtn, urlInput, addUrlBtn);
+        wrap.appendChild(addRow);
+
+        const layoutRow = document.createElement('div');
+        layoutRow.className = 'griot-editor-gallery__layout-row';
+        const lbl = document.createElement('span');
+        lbl.className = 'griot-editor-gallery__layout-label'; lbl.textContent = 'Layout:';
+        layoutRow.appendChild(lbl);
+        for (const l of ['grid', 'masonry', 'carousel', 'strip']) {
+          const btn = document.createElement('button');
+          btn.type = 'button'; btn.textContent = l;
+          btn.className = `griot-editor-gallery__layout-btn${layout === l ? ' is-active' : ''}`;
+          btn.addEventListener('click', () => this._commit(updateBlock(this._doc, block.id, { meta: { layout: l } })));
+          layoutRow.appendChild(btn);
+        }
+        wrap.appendChild(layoutRow);
+        break;
+      }
+
       case 'video': {
         const { src = '' } = block.meta ?? {};
         if (src) {
           const yt = src.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([a-zA-Z0-9_-]{11})/);
           const vm = src.match(/vimeo\.com\/(\d+)/);
           if (yt || vm) {
-            const embedSrc = yt
-              ? `https://www.youtube.com/embed/${yt[1]}`
-              : `https://player.vimeo.com/video/${vm[1]}`;
+            const embedSrc = yt ? `https://www.youtube.com/embed/${yt[1]}` : `https://player.vimeo.com/video/${vm[1]}`;
             const iframe = document.createElement('iframe');
-            iframe.src = embedSrc;
-            iframe.className = 'griot-editor-block__video-preview';
+            iframe.src = embedSrc; iframe.className = 'griot-editor-block__video-preview';
             iframe.frameBorder = '0';
             iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
             wrap.appendChild(iframe);
           }
         }
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
-        [
-          this._metaInput(block, 'src',     'YouTube / Vimeo / video URL…', { style: 'flex:2' }),
-          this._metaInput(block, 'caption', 'Caption…', {}),
-        ].forEach(el => row.appendChild(el));
+        const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
+        [this._metaInput(block, 'src', 'YouTube / Vimeo / video URL…', { style: 'flex:2' }), this._metaInput(block, 'caption', 'Caption…', {})].forEach(el => row.appendChild(el));
         wrap.appendChild(row);
+        break;
+      }
+
+      case 'audio': {
+        const { src = '' } = block.meta ?? {};
+        if (src) {
+          const sp = src.match(/open\.spotify\.com\/(track|album|playlist|episode)\/([a-zA-Z0-9]+)/);
+          const sc = src.includes('soundcloud.com/');
+          if (sp) {
+            const iframe = document.createElement('iframe');
+            iframe.src = `https://open.spotify.com/embed/${sp[1]}/${sp[2]}`;
+            iframe.className = 'griot-editor-block__audio-preview'; iframe.frameBorder = '0';
+            iframe.allow = 'autoplay; clipboard-write; encrypted-media'; wrap.appendChild(iframe);
+          } else if (sc) {
+            const iframe = document.createElement('iframe');
+            iframe.src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(src)}&color=%236366f1&auto_play=false`;
+            iframe.className = 'griot-editor-block__audio-preview'; iframe.frameBorder = '0'; wrap.appendChild(iframe);
+          } else if (/\.(mp3|wav|ogg|m4a|aac|flac)(\?.*)?$/i.test(src)) {
+            const audio = document.createElement('audio');
+            audio.src = src; audio.controls = true; audio.className = 'griot-editor-block__audio-native'; wrap.appendChild(audio);
+          }
+        }
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file'; fileInput.accept = 'audio/*'; fileInput.style.display = 'none';
+        fileInput.addEventListener('change', async (e) => {
+          const files = [...(e.target.files ?? [])]; e.target.value = '';
+          if (!files.length) return;
+          const results = await this._uploadFiles(files.slice(0, 1));
+          if (results[0]) this._commit(updateBlock(this._doc, block.id, { meta: { src: results[0].url ?? results[0].src ?? '', caption: block.meta?.caption ?? '' } }));
+        });
+        const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
+        const uploadBtn = document.createElement('button');
+        uploadBtn.type = 'button'; uploadBtn.className = 'griot-editor-block__pick-btn';
+        uploadBtn.textContent = '⬆ Upload audio'; uploadBtn.addEventListener('click', () => fileInput.click());
+        row.append(fileInput, uploadBtn, this._metaInput(block, 'src', 'SoundCloud / Spotify / audio URL…', { style: 'flex:2' }), this._metaInput(block, 'caption', 'Caption…', {}));
+        wrap.appendChild(row);
+        break;
+      }
+
+      case 'embed': {
+        const { src = '', height = 400 } = block.meta ?? {};
+        if (src) {
+          const preview = document.createElement('iframe');
+          preview.src = src; preview.style.height = `${height}px`;
+          preview.className = 'griot-editor-block__embed-preview'; preview.frameBorder = '0';
+          preview.allow = 'autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media';
+          preview.allowFullscreen = true; wrap.appendChild(preview);
+        }
+        const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center';
+        const heightInput = document.createElement('input');
+        heightInput.type = 'number'; heightInput.className = 'griot-editor-block__meta-input';
+        heightInput.placeholder = 'Height px'; heightInput.value = String(height);
+        heightInput.min = '100'; heightInput.max = '1200'; heightInput.style.width = '90px';
+        heightInput.addEventListener('change', () => {
+          const h = Math.max(100, Math.min(1200, Number(heightInput.value) || 400));
+          this._commit(updateBlock(this._doc, block.id, { meta: { height: h } }));
+        });
+        row.append(this._metaInput(block, 'src', 'Embed URL or iframe src…', { style: 'flex:3' }), heightInput, this._metaInput(block, 'caption', 'Caption…', {}));
+        wrap.appendChild(row);
+        break;
+      }
+
+      case 'columns': {
+        const columns = Array.isArray(block.meta?.columns) ? block.meta.columns : [{ text: '' }, { text: '' }];
+        const grid = document.createElement('div');
+        grid.className = 'griot-editor-columns';
+        grid.style.setProperty('--griot-col-count', String(columns.length));
+        columns.forEach((col, i) => {
+          const colWrap = document.createElement('div'); colWrap.className = 'griot-editor-columns__col';
+          const ed = document.createElement('div');
+          ed.contentEditable = 'plaintext-only'; ed.className = 'griot-editor-columns__editable';
+          ed.dataset.placeholder = 'Column text…'; ed.spellcheck = true; ed.textContent = col.text ?? '';
+          const preview = document.createElement('div'); preview.className = 'griot-editor-columns__preview';
+          const refreshPreview = (text) => {
+            preview.innerHTML = '';
+            if (text?.trim()) preview.appendChild(renderInlineToDOM(text, { onEventClick: this._options.onEventClick, onCiteClick: this._options.onCiteClick }));
+          };
+          refreshPreview(col.text ?? '');
+          ed.addEventListener('input', () => {
+            const text = ed.textContent;
+            const b = getBlock(this._doc, block.id);
+            const cols = Array.isArray(b?.meta?.columns) ? b.meta.columns : columns;
+            const next = cols.map((c, j) => j === i ? { ...c, text } : c);
+            this._doc = updateBlock(this._doc, block.id, { meta: { columns: next } });
+            this._history.replace(this._doc); refreshPreview(text);
+            clearTimeout(this._typingTimer);
+            this._typingTimer = setTimeout(() => { this._history.push(this._doc); this._emit(); }, TYPING_DEBOUNCE_MS);
+          });
+          colWrap.append(ed, preview); grid.appendChild(colWrap);
+        });
+        const ctrlRow = document.createElement('div'); ctrlRow.className = 'griot-editor-columns__controls';
+        if (columns.length < 4) {
+          ctrlRow.appendChild(this._mkSmallBtn('+ col', 'Add column', () => {
+            const b = getBlock(this._doc, block.id);
+            const cols = Array.isArray(b?.meta?.columns) ? b.meta.columns : columns;
+            this._commit(updateBlock(this._doc, block.id, { meta: { columns: [...cols, { text: '' }] } }));
+          }));
+        }
+        if (columns.length > 2) {
+          ctrlRow.appendChild(this._mkSmallBtn('- col', 'Remove last column', () => {
+            const b = getBlock(this._doc, block.id);
+            const cols = Array.isArray(b?.meta?.columns) ? b.meta.columns : columns;
+            this._commit(updateBlock(this._doc, block.id, { meta: { columns: cols.slice(0, -1) } }));
+          }, 'is-del'));
+        }
+        wrap.append(grid, ctrlRow);
+        break;
+      }
+
+      case 'checklist': {
+        const items = Array.isArray(block.meta?.items) ? block.meta.items : [];
+        const list = document.createElement('div'); list.className = 'griot-editor-checklist';
+        const renderRows = () => {
+          list.innerHTML = '';
+          const b = getBlock(this._doc, block.id);
+          const current = Array.isArray(b?.meta?.items) ? b.meta.items : items;
+          current.forEach((item, i) => {
+            const row = document.createElement('div'); row.className = 'griot-editor-checklist__row';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox'; cb.checked = !!item.checked; cb.className = 'griot-editor-checklist__cb';
+            cb.addEventListener('change', () => {
+              const b2 = getBlock(this._doc, block.id);
+              const its = Array.isArray(b2?.meta?.items) ? b2.meta.items : [];
+              this._commit(updateBlock(this._doc, block.id, { meta: { items: its.map((it, j) => j === i ? { ...it, checked: cb.checked } : it) } }));
+            });
+            const textInput = document.createElement('input');
+            textInput.type = 'text'; textInput.className = 'griot-editor-block__meta-input griot-editor-checklist__text';
+            textInput.value = item.text ?? ''; textInput.placeholder = 'List item…';
+            textInput.addEventListener('input', () => {
+              const b2 = getBlock(this._doc, block.id);
+              const its = Array.isArray(b2?.meta?.items) ? b2.meta.items : [];
+              this._doc = updateBlock(this._doc, block.id, { meta: { items: its.map((it, j) => j === i ? { ...it, text: textInput.value } : it) } });
+              this._history.replace(this._doc);
+              clearTimeout(this._typingTimer);
+              this._typingTimer = setTimeout(() => { this._history.push(this._doc); this._emit(); }, TYPING_DEBOUNCE_MS);
+            });
+            textInput.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                const b2 = getBlock(this._doc, block.id);
+                const its = [...(Array.isArray(b2?.meta?.items) ? b2.meta.items : [])];
+                its.splice(i + 1, 0, { text: '', checked: false });
+                this._commit(updateBlock(this._doc, block.id, { meta: { items: its } }));
+                requestAnimationFrame(() => { const el = this._container.querySelector(`[data-block-id="${block.id}"]`); el?.querySelectorAll('.griot-editor-checklist__text')?.[i + 1]?.focus(); });
+              }
+              if (e.key === 'Backspace' && textInput.value === '') {
+                e.preventDefault();
+                const b2 = getBlock(this._doc, block.id);
+                const its = Array.isArray(b2?.meta?.items) ? b2.meta.items : [];
+                if (its.length <= 1) return;
+                this._commit(updateBlock(this._doc, block.id, { meta: { items: its.filter((_, j) => j !== i) } }));
+                requestAnimationFrame(() => { const el = this._container.querySelector(`[data-block-id="${block.id}"]`); const ins = el?.querySelectorAll('.griot-editor-checklist__text'); ins?.[Math.min(i, ins.length - 1)]?.focus(); });
+              }
+            });
+            const delBtn = this._mkSmallBtn('×', 'Remove item', () => {
+              const b2 = getBlock(this._doc, block.id);
+              const its = Array.isArray(b2?.meta?.items) ? b2.meta.items : [];
+              if (its.length <= 1) return;
+              this._commit(updateBlock(this._doc, block.id, { meta: { items: its.filter((_, j) => j !== i) } }));
+            }, 'is-del');
+            row.append(cb, textInput, delBtn); list.appendChild(row);
+          });
+          const addBtn = document.createElement('button');
+          addBtn.type = 'button'; addBtn.className = 'griot-editor-block__pick-btn'; addBtn.style.marginTop = '6px';
+          addBtn.textContent = '+ Add item';
+          addBtn.addEventListener('click', () => {
+            const b2 = getBlock(this._doc, block.id);
+            const its = Array.isArray(b2?.meta?.items) ? b2.meta.items : [];
+            this._commit(updateBlock(this._doc, block.id, { meta: { items: [...its, { text: '', checked: false }] } }));
+            requestAnimationFrame(() => { const el = this._container.querySelector(`[data-block-id="${block.id}"]`); const ins = el?.querySelectorAll('.griot-editor-checklist__text'); ins?.[ins.length - 1]?.focus(); });
+          });
+          list.appendChild(addBtn);
+        };
+        renderRows(); wrap.appendChild(list);
         break;
       }
 
@@ -373,13 +630,8 @@ export class Editor {
       }
 
       case 'timeline_ref': {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
-        [
-          this._metaInput(block, 'eventId',    'Event ID…',         { style: 'flex:1;font-family:monospace' }),
-          this._metaInput(block, 'eventTitle', 'Display title…',    { style: 'flex:2' }),
-          this._metaInput(block, 'note',       'Note (inline ok)…', { style: 'flex:3' }),
-        ].forEach(el => row.appendChild(el));
+        const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap';
+        [this._metaInput(block, 'eventId', 'Event ID…', { style: 'flex:1;font-family:monospace' }), this._metaInput(block, 'eventTitle', 'Display title…', { style: 'flex:2' }), this._metaInput(block, 'note', 'Note (inline ok)…', { style: 'flex:3' })].forEach(el => row.appendChild(el));
         wrap.appendChild(row);
         break;
       }
@@ -389,13 +641,12 @@ export class Editor {
         if (bookId) {
           const book = this._books.find(b => b.id === bookId);
           const unit = book?.units?.find(u => u.id === unitId);
-          const label = document.createElement('div');
-          label.className = 'griot-editor-block__citation-label';
+          const label = document.createElement('div'); label.className = 'griot-editor-block__citation-label';
           label.textContent = book ? `📖 ${book.title} · ${unit?.label ?? '—'}` : '📖 Book not found';
           wrap.appendChild(label);
         }
-        wrap.appendChild(this._metaTextarea(block, 'quote', 'Quoted passage…',                  { rows: 2 }));
-        wrap.appendChild(this._metaTextarea(block, 'note',  'Commentary (inline syntax ok)…', { rows: 2 }));
+        wrap.appendChild(this._metaTextarea(block, 'quote', 'Quoted passage…', { rows: 2 }));
+        wrap.appendChild(this._metaTextarea(block, 'note', 'Commentary (inline syntax ok)…', { rows: 2 }));
         break;
       }
     }
@@ -570,6 +821,16 @@ export class Editor {
       const newText = sc.clearText ? '' : text.slice(sc.strip);
       const patch   = { type: sc.type, meta: { ...defaultMeta(sc.type), ...(sc.meta ?? {}) } };
       if (sc.clearText || sc.type !== 'divider') patch.text = newText;
+
+      // Checklist shortcut creates a checklist block (text=null)
+      if (sc.type === 'checklist') {
+        this._commit(updateBlock(this._doc, blockId, { type: 'checklist', meta: { items: [{ text: '', checked: false }] } }));
+        requestAnimationFrame(() => {
+          const el = this._container.querySelector(`[data-block-id="${blockId}"]`);
+          el?.querySelector('.griot-editor-checklist__text')?.focus();
+        });
+        return;
+      }
 
       const doc = updateBlock(this._doc, blockId, patch);
       this._commit(doc);
@@ -754,7 +1015,102 @@ export class Editor {
     }
   }
 
-  _undo() {
+  // ── URL paste detection ──────────────────────────────────────────────────────
+
+  _onPaste(blockId, editable, e) {
+    const pasted = e.clipboardData?.getData('text/plain')?.trim();
+    if (!pasted || !/^https?:\/\/[^\s]{4,}$/.test(pasted)) return;
+    const current = editable.textContent.trim();
+    if (current !== '' && current !== pasted) return;
+    const block = getBlock(this._doc, blockId);
+    if (!block) return;
+
+    if (/\.(jpe?g|png|webp|gif|avif|svg|bmp|tiff?)(\?[^#]*)?$/i.test(pasted)) {
+      e.preventDefault();
+      this._commit(updateBlock(this._doc, blockId, { type: 'image', meta: { src: pasted, alt: '', caption: '', width: 'full' } }));
+      return;
+    }
+    const yt = pasted.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);
+    if (yt) {
+      e.preventDefault();
+      this._commit(updateBlock(this._doc, blockId, { type: 'video', meta: { src: pasted, embedUrl: `https://www.youtube.com/embed/${yt[1]}?rel=0`, caption: '' } }));
+      return;
+    }
+    const vm = pasted.match(/vimeo\.com\/(\d+)/);
+    if (vm) {
+      e.preventDefault();
+      this._commit(updateBlock(this._doc, blockId, { type: 'video', meta: { src: pasted, embedUrl: `https://player.vimeo.com/video/${vm[1]}`, caption: '' } }));
+      return;
+    }
+    const sp = pasted.match(/open\.spotify\.com\/(track|album|playlist|episode)\/([a-zA-Z0-9]+)/);
+    if (sp) {
+      e.preventDefault();
+      this._commit(updateBlock(this._doc, blockId, { type: 'audio', meta: { src: pasted, embedUrl: `https://open.spotify.com/embed/${sp[1]}/${sp[2]}`, caption: '' } }));
+      return;
+    }
+    if (pasted.includes('soundcloud.com/')) {
+      e.preventDefault();
+      this._commit(updateBlock(this._doc, blockId, { type: 'audio', meta: { src: pasted, embedUrl: `https://w.soundcloud.com/player/?url=${encodeURIComponent(pasted)}&color=%236366f1&auto_play=false`, caption: '' } }));
+      return;
+    }
+    if (/\.(mp4|webm|mov|ogv)(\?[^#]*)?$/i.test(pasted)) {
+      e.preventDefault();
+      this._commit(updateBlock(this._doc, blockId, { type: 'video', meta: { src: pasted, caption: '' } }));
+      return;
+    }
+    if (/\.(mp3|wav|ogg|m4a|aac|flac)(\?[^#]*)?$/i.test(pasted)) {
+      e.preventDefault();
+      this._commit(updateBlock(this._doc, blockId, { type: 'audio', meta: { src: pasted, caption: '' } }));
+      return;
+    }
+    if (block.type === 'paragraph' && current === '') {
+      e.preventDefault();
+      this._commit(updateBlock(this._doc, blockId, { type: 'embed', meta: { src: pasted, height: 400, caption: '' } }));
+    }
+  }
+
+  // ── Upload helpers ────────────────────────────────────────────────────────────
+
+  async _uploadFiles(files) {
+    if (!files.length) return [];
+    if (typeof this._options.onUpload === 'function') {
+      const results = await Promise.allSettled(files.map(f => this._options.onUpload(f)));
+      return results.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value);
+    }
+    const url = this._options.uploadUrl ?? UPLOAD_URL_DEFAULT;
+    const fd  = new FormData();
+    files.forEach(f => fd.append('file', f));
+    try {
+      const res  = await fetch(url, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? 'Upload failed');
+      return (data.files ?? []).filter(f => !f.error);
+    } catch (err) {
+      console.error('[Editor] upload failed:', err);
+      return [];
+    }
+  }
+
+  async _galleryUpload(blockId, files) {
+    const b = getBlock(this._doc, blockId);
+    if (!b) return;
+    const placeholders = files.map(() => ({ _uploading: true }));
+    this._commit(updateBlock(this._doc, blockId, { meta: { items: [...(b.meta?.items ?? []), ...placeholders] } }));
+    try {
+      const results = await this._uploadFiles(files);
+      const b2 = getBlock(this._doc, blockId);
+      if (!b2) return;
+      const cleaned  = (b2.meta?.items ?? []).filter(it => !it._uploading);
+      const newItems = results.map(r => ({ src: r.url ?? r.src ?? '', url: r.url ?? r.src ?? '', alt: r.alt_text ?? '', caption: r.caption ?? '' }));
+      this._commit(updateBlock(this._doc, blockId, { meta: { items: [...cleaned, ...newItems] } }));
+    } catch {
+      const b2 = getBlock(this._doc, blockId);
+      if (!b2) return;
+      this._commit(updateBlock(this._doc, blockId, { meta: { items: (b2.meta?.items ?? []).filter(it => !it._uploading) } }));
+    }
+  }
+
+    _undo() {
     this._doc = this._history.undo();
     this._render();
     this._emit();
@@ -765,4 +1121,60 @@ export class Editor {
     this._render();
     this._emit();
   }
+}
+
+// ─── Editor style injection ───────────────────────────────────────────────────
+// Styles for gallery editor UI, columns editor, checklist editor, audio preview.
+// Injected once; the base editor styles (griot-editor-block, etc.) live in
+// the project's griot.css.
+
+let _editorStylesInjected = false;
+function _injectEditorStyles() {
+  if (_editorStylesInjected || typeof document === 'undefined') return;
+  _editorStylesInjected = true;
+  const s = document.createElement('style');
+  s.id = 'griot-editor-extra-styles';
+  s.textContent = `
+/* ── Gallery editor ─────────────────────────────────────────────────────── */
+.griot-editor-gallery__thumbs { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:8px; margin-bottom:10px; }
+.griot-editor-gallery__thumb { position:relative; border-radius:8px; overflow:hidden; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); }
+.griot-editor-gallery__thumb img { width:100%; aspect-ratio:4/3; object-fit:cover; display:block; }
+.griot-editor-gallery__thumb-caption { width:100%; box-sizing:border-box; background:none; border:none; border-top:1px solid rgba(255,255,255,0.08); color:#94a3b8; font-size:11px; padding:4px 6px; font-family:inherit; }
+.griot-editor-gallery__thumb-caption:focus { outline:none; color:#e2e8f0; }
+.griot-editor-gallery__thumb-remove { position:absolute; top:4px; right:4px; background:rgba(0,0,0,0.6); border:none; color:#f87171; font-size:13px; width:22px; height:22px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity 0.15s; }
+.griot-editor-gallery__thumb:hover .griot-editor-gallery__thumb-remove { opacity:1; }
+.griot-editor-gallery__thumb.is-uploading { display:flex; align-items:center; justify-content:center; min-height:80px; }
+.griot-editor-gallery__thumb-spinner { width:20px; height:20px; border:2px solid rgba(99,102,241,0.25); border-top-color:#6366f1; border-radius:50%; animation:griotSpin 0.7s linear infinite; }
+@keyframes griotSpin { to { transform:rotate(360deg); } }
+.griot-editor-gallery__add-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; align-items:center; }
+.griot-editor-gallery__layout-row { display:flex; align-items:center; gap:6px; }
+.griot-editor-gallery__layout-label { font-size:11px; color:#475569; }
+.griot-editor-gallery__layout-btn { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.10); border-radius:5px; color:#64748b; padding:3px 10px; font-size:12px; cursor:pointer; font-family:inherit; transition:background 0.15s,color 0.15s; }
+.griot-editor-gallery__layout-btn:hover { background:rgba(99,102,241,0.10); color:#a5b4fc; }
+.griot-editor-gallery__layout-btn.is-active { background:rgba(99,102,241,0.18); border-color:rgba(99,102,241,0.5); color:#a5b4fc; }
+
+/* ── Audio editor ───────────────────────────────────────────────────────── */
+.griot-editor-block__audio-preview { width:100%; height:80px; border:none; display:block; margin-bottom:8px; border-radius:8px; }
+.griot-editor-block__audio-native { width:100%; display:block; margin-bottom:8px; }
+
+/* ── Embed editor ───────────────────────────────────────────────────────── */
+.griot-editor-block__embed-preview { width:100%; display:block; margin-bottom:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); }
+
+/* ── Columns editor ─────────────────────────────────────────────────────── */
+.griot-editor-columns { display:grid; grid-template-columns:repeat(var(--griot-col-count,2),1fr); gap:12px; margin-bottom:8px; }
+.griot-editor-columns__col { display:flex; flex-direction:column; gap:4px; }
+.griot-editor-columns__editable { min-height:60px; padding:8px 10px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.10); border-radius:6px; color:#e2e8f0; font-size:13px; line-height:1.6; outline:none; }
+.griot-editor-columns__editable:empty::before { content:attr(data-placeholder); color:#334155; pointer-events:none; }
+.griot-editor-columns__editable:focus { border-color:rgba(99,102,241,0.45); }
+.griot-editor-columns__preview { font-size:12px; color:#64748b; padding:4px 2px; min-height:0; line-height:1.5; }
+.griot-editor-columns__preview:empty { display:none; }
+.griot-editor-columns__controls { display:flex; gap:6px; margin-top:4px; }
+
+/* ── Checklist editor ───────────────────────────────────────────────────── */
+.griot-editor-checklist { display:flex; flex-direction:column; gap:4px; }
+.griot-editor-checklist__row { display:flex; align-items:center; gap:6px; }
+.griot-editor-checklist__cb { flex-shrink:0; width:15px; height:15px; accent-color:#6366f1; cursor:pointer; }
+.griot-editor-checklist__text { flex:1; }
+  `;
+  document.head.appendChild(s);
 }

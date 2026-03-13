@@ -8,15 +8,16 @@
 //   onCiteClick  — (blockId) => void
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { anchorId }                                               from '../core/Block.js';
+import { anchorId }                                                from '../core/Block.js';
 import { renderInlineToDOM, renderInlineToHTML, escHtml, escAttr } from '../inline/InlineRenderer.js';
-import { getBlockDef }                                            from './BlockSchema.js';
-
-const LAYOUT_OPTIONS = ['grid','masonry','carousel','strip'];
+import { getBlockDef }                                             from './BlockSchema.js';
+import { renderGallery }                                           from './GalleryRenderer.js';
+import { lightbox }                                                from './Lightbox.js';
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 
 export function renderBlock(block, opts = {}) {
+  _injectStyles();
   const el = _render(block, opts);
   if (el) {
     el.id                = anchorId(block.id);
@@ -101,6 +102,34 @@ function _render(block, opts) {
       return el;
     }
 
+    // ── Checklist ─────────────────────────────────────────────────────────────
+
+    case 'checklist': {
+      const items = Array.isArray(meta.items) ? meta.items : [];
+      const el = document.createElement('ul');
+      el.className = 'griot-block griot-checklist';
+
+      for (const item of items) {
+        const li = document.createElement('li');
+        li.className = `griot-checklist__item${item.checked ? ' is-checked' : ''}`;
+
+        const cb = document.createElement('input');
+        cb.type      = 'checkbox';
+        cb.checked   = !!item.checked;
+        cb.disabled  = true;
+        cb.className = 'griot-checklist__checkbox';
+        cb.setAttribute('aria-hidden', 'true');
+
+        const span = document.createElement('span');
+        span.className = 'griot-checklist__text';
+        if (item.text) span.appendChild(il(item.text, opts));
+
+        li.append(cb, span);
+        el.appendChild(li);
+      }
+      return el;
+    }
+
     // ── Media ─────────────────────────────────────────────────────────────────
 
     case 'image': {
@@ -113,7 +142,12 @@ function _render(block, opts) {
         fig.appendChild(sp);
       } else if (meta.src) {
         const img = document.createElement('img');
-        img.src = meta.src; img.alt = meta.alt ?? '';
+        img.src          = meta.src;
+        img.alt          = meta.alt ?? '';
+        img.style.cursor = 'zoom-in';
+        img.addEventListener('click', () =>
+          lightbox.open([{ src: meta.src, alt: meta.alt, caption: meta.caption }], 0)
+        );
         fig.appendChild(img);
         if (meta.caption) {
           const cap = document.createElement('figcaption');
@@ -164,7 +198,9 @@ function _render(block, opts) {
     }
 
     case 'gallery': {
-      return _renderGallery(meta.items ?? [], meta.layout ?? 'grid', opts);
+      const galleryEl = renderGallery(meta.items ?? [], meta.layout ?? 'grid');
+      galleryEl.classList.add('griot-block');
+      return galleryEl;
     }
 
     case 'embed': {
@@ -185,6 +221,21 @@ function _render(block, opts) {
     }
 
     // ── Structure ─────────────────────────────────────────────────────────────
+
+    case 'columns': {
+      const columns = Array.isArray(meta.columns) ? meta.columns : [{ text: '' }, { text: '' }];
+      const el = document.createElement('div');
+      el.className = 'griot-block griot-columns';
+      el.style.setProperty('--griot-col-count', String(columns.length));
+
+      for (const col of columns) {
+        const colEl = document.createElement('div');
+        colEl.className = 'griot-columns__col';
+        if (col.text?.trim()) colEl.appendChild(il(col.text, opts));
+        el.appendChild(colEl);
+      }
+      return el;
+    }
 
     case 'table': {
       const headers  = Array.isArray(meta.headers) ? meta.headers : [];
@@ -256,36 +307,6 @@ function _render(block, opts) {
   }
 }
 
-// ─── Gallery renderer ─────────────────────────────────────────────────────────
-
-function _renderGallery(items, layout, opts) {
-  const wrap = document.createElement('div');
-  wrap.className = `griot-block griot-gallery griot-gallery--${LAYOUT_OPTIONS.includes(layout)?layout:'grid'}`;
-
-  if (!items.length) {
-    wrap.innerHTML = `<div class="griot-gallery__empty">No images yet</div>`;
-    return wrap;
-  }
-
-  for (const [i, item] of items.entries()) {
-    const el  = document.createElement('div');
-    el.className = 'griot-gallery__item';
-    const img = document.createElement('img');
-    img.src = item.src ?? item.url ?? '';
-    img.alt = item.alt ?? item.alt_text ?? '';
-    img.loading = 'lazy';
-    el.appendChild(img);
-    if (item.caption) {
-      const cap = document.createElement('p');
-      cap.className = 'griot-gallery__caption';
-      cap.textContent = item.caption;
-      el.appendChild(cap);
-    }
-    wrap.appendChild(el);
-  }
-  return wrap;
-}
-
 // ─── Citation renderer ────────────────────────────────────────────────────────
 
 function _renderCitation(block, opts) {
@@ -344,5 +365,28 @@ function _scEmbed(src) {
   return null;
 }
 
-// Export helpers for editor use
 export { _ytEmbed as resolveYouTube, _vimeoEmbed as resolveVimeo, _spotifyEmbed as resolveSpotify, _scEmbed as resolveSoundCloud };
+
+// ─── Style injection ──────────────────────────────────────────────────────────
+
+let _stylesInjected = false;
+function _injectStyles() {
+  if (_stylesInjected || typeof document === 'undefined') return;
+  _stylesInjected = true;
+  const s = document.createElement('style');
+  s.id = 'griot-block-styles';
+  s.textContent = `
+/* ── Checklist ──────────────────────────────────────────────────────────── */
+.griot-checklist { list-style:none; padding:0; margin:0; }
+.griot-checklist__item { display:flex; align-items:baseline; gap:10px; padding:3px 0; line-height:1.6; }
+.griot-checklist__checkbox { flex-shrink:0; width:15px; height:15px; margin:0; accent-color:#6366f1; cursor:default; position:relative; top:2px; }
+.griot-checklist__text { flex:1; }
+.griot-checklist__item.is-checked .griot-checklist__text { text-decoration:line-through; opacity:0.45; }
+
+/* ── Columns ─────────────────────────────────────────────────────────────── */
+.griot-columns { display:grid; grid-template-columns:repeat(var(--griot-col-count,2),1fr); gap:24px; align-items:start; }
+.griot-columns__col { min-width:0; line-height:1.7; }
+@media (max-width:640px) { .griot-columns { grid-template-columns:1fr; } }
+  `;
+  document.head.appendChild(s);
+}
