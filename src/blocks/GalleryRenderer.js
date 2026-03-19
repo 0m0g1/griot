@@ -11,15 +11,7 @@
 // layouts: 'grid' | 'masonry' | 'carousel' | 'strip'
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Lazy import avoids circular dependency when both are re-exported from Griot.js
-let _lightbox = null;
-function getLightbox() {
-  if (!_lightbox) {
-    // Dynamic require/import — works in both CJS and ESM bundler contexts
-    _lightbox = require('./Lightbox.js').lightbox;
-  }
-  return _lightbox;
-}
+import { lightbox } from './Lightbox.js';
 
 const VALID_LAYOUTS = new Set(['grid', 'masonry', 'carousel', 'strip']);
 
@@ -105,7 +97,7 @@ function _itemEl(item, index, allItems) {
   img.decoding = 'async';
   img.draggable = false;
 
-  img.addEventListener('click', () => getLightbox().open(allItems, index));
+  img.addEventListener('click', () => lightbox.open(allItems, index));
 
   el.appendChild(img);
 
@@ -150,7 +142,7 @@ function _carousel(items, wrap) {
 
     // Click on carousel image → open lightbox at CURRENT idx (not i, since user
     // may have navigated away from the first image)
-    img.addEventListener('click', () => getLightbox().open(items, idx));
+    img.addEventListener('click', () => lightbox.open(items, idx));
 
     slide.appendChild(img);
 
