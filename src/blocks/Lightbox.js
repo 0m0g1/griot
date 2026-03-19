@@ -7,6 +7,13 @@
 //
 // items shape: { src?, url?, alt?, alt_text?, caption? }[]
 // Keyboard: ← → Escape  |  Touch: swipe left/right  |  Click backdrop: close
+//
+// Fix: the singleton is stored on globalThis.__griot_lightbox so that even if
+// this module is evaluated more than once (e.g. two different import paths
+// resolving to separate webpack module cache entries — one via Griot.js facade,
+// one via direct ./Lightbox.js import), all callers share the exact same
+// instance. Without this, clicking outside one overlay closed it but left the
+// second overlay (from the other instance) stuck on screen.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class Lightbox {
@@ -41,7 +48,6 @@ export class Lightbox {
     this._el.classList.remove('griot-lb--open');
     document.body.style.overflow = '';
     this._isOpen = false;
-    // Wait for CSS fade-out before hiding from layout
     setTimeout(() => {
       if (!this._isOpen && this._el) this._el.hidden = true;
     }, 270);
@@ -57,20 +63,16 @@ export class Lightbox {
     el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-label', 'Image viewer');
 
-    // Backdrop click
     el.addEventListener('click', e => { if (e.target === el) this.close(); });
 
-    // Close button
     const close = _mkBtn('✕', 'griot-lb__close', 'Close');
     close.addEventListener('click', () => this.close());
 
-    // Prev / Next
     const prev = _mkBtn('‹', 'griot-lb__nav griot-lb__nav--prev', 'Previous image');
     const next = _mkBtn('›', 'griot-lb__nav griot-lb__nav--next', 'Next image');
     prev.addEventListener('click', e => { e.stopPropagation(); this._move(-1); });
     next.addEventListener('click', e => { e.stopPropagation(); this._move(1);  });
 
-    // Stage: image + caption
     const stage = document.createElement('div');
     stage.className = 'griot-lb__stage';
     stage.addEventListener('click', e => e.stopPropagation());
@@ -85,17 +87,14 @@ export class Lightbox {
 
     stage.append(img, cap);
 
-    // Counter
     const ctr = document.createElement('div');
     ctr.className = 'griot-lb__counter';
 
-    // Thumbnail strip (hidden until > 1 item)
     const strip = document.createElement('div');
     strip.className = 'griot-lb__strip';
 
     el.append(close, prev, next, stage, ctr, strip);
 
-    // Touch swipe
     el.addEventListener('touchstart', e => {
       this._touchStartX = e.touches[0].clientX;
     }, { passive: true });
@@ -114,7 +113,6 @@ export class Lightbox {
     this._next  = next;
     this._strip = strip;
 
-    // Inject styles once
     _injectStyles();
   }
 
@@ -126,7 +124,6 @@ export class Lightbox {
     document.body.style.overflow = 'hidden';
     document.addEventListener('keydown', this._onKey);
 
-    // Double rAF ensures the hidden→visible transition actually runs
     requestAnimationFrame(() =>
       requestAnimationFrame(() => this._el.classList.add('griot-lb--open'))
     );
@@ -153,7 +150,6 @@ export class Lightbox {
     const alt = item.alt ?? item.alt_text ?? '';
     const cap = item.caption ?? '';
 
-    // Fade-swap: fade out → preload → set src → fade in
     this._img.style.opacity = '0';
     this._img.alt = alt;
 
@@ -171,13 +167,12 @@ export class Lightbox {
     this._next.hidden = single;
     this._ctr.textContent = single ? '' : `${this._idx + 1} / ${this._items.length}`;
 
-    // Sync strip active thumb
     this._strip.querySelectorAll('.griot-lb__thumb').forEach((th, i) => {
       th.classList.toggle('is-active', i === this._idx);
     });
   }
 
-  // ── Thumbnail strip (built once per open() call) ────────────────────────────
+  // ── Thumbnail strip ─────────────────────────────────────────────────────────
 
   _buildStrip() {
     this._strip.innerHTML = '';
@@ -232,7 +227,6 @@ function _injectStyles() {
   const s = document.createElement('style');
   s.id = 'griot-lightbox-styles';
   s.textContent = `
-/* ── Lightbox overlay ───────────────────────────────────────────────────── */
 .griot-lb {
   position: fixed; inset: 0; z-index: 9000;
   background: rgba(0,0,0,0);
@@ -242,8 +236,6 @@ function _injectStyles() {
   overscroll-behavior: none;
 }
 .griot-lb--open { background: rgba(0,0,0,0.92); }
-
-/* Stage */
 .griot-lb__stage {
   position: relative; display: flex; flex-direction: column;
   align-items: center; max-width: 92vw; max-height: 80vh;
@@ -259,8 +251,6 @@ function _injectStyles() {
   margin: 10px 0 0; text-align: center;
   max-width: 70ch; line-height: 1.5;
 }
-
-/* Nav buttons */
 .griot-lb__nav {
   position: fixed; top: 50%; transform: translateY(-50%);
   background: rgba(255,255,255,0.10); border: none;
@@ -272,8 +262,6 @@ function _injectStyles() {
 .griot-lb__nav:hover { background: rgba(255,255,255,0.22); }
 .griot-lb__nav--prev { left: 0; border-radius: 0 8px 8px 0; }
 .griot-lb__nav--next { right: 0; border-radius: 8px 0 0 8px; }
-
-/* Close */
 .griot-lb__close {
   position: fixed; top: 14px; right: 18px;
   background: rgba(255,255,255,0.10); border: none;
@@ -283,15 +271,11 @@ function _injectStyles() {
   transition: background 0.15s; z-index: 2;
 }
 .griot-lb__close:hover { background: rgba(255,255,255,0.22); }
-
-/* Counter */
 .griot-lb__counter {
   position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
   font-size: 13px; color: #64748b; letter-spacing: 0.04em;
   pointer-events: none;
 }
-
-/* Thumbnail strip */
 .griot-lb__strip {
   position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
   display: flex; gap: 6px; max-width: 90vw;
@@ -307,7 +291,6 @@ function _injectStyles() {
 .griot-lb__thumb:hover { opacity: 0.85; }
 .griot-lb__thumb.is-active { border-color: #6366f1; opacity: 1; }
 .griot-lb__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
 @media (max-width: 600px) {
   .griot-lb__nav { width: 40px; height: 64px; font-size: 24px; }
   .griot-lb__strip { display: none; }
@@ -316,5 +299,18 @@ function _injectStyles() {
   document.head.appendChild(s);
 }
 
+// ── Singleton ─────────────────────────────────────────────────────────────────
+// Store on globalThis so all module instances (regardless of import path or
+// webpack chunk) share the exact same object. This prevents two overlays being
+// appended to document.body when the module is evaluated more than once.
+
+const GLOBAL_KEY = '__griot_lightbox__';
+
+if (typeof globalThis !== 'undefined' && !globalThis[GLOBAL_KEY]) {
+  globalThis[GLOBAL_KEY] = new Lightbox();
+}
+
 /** Shared singleton — import and use directly everywhere. */
-export const lightbox = new Lightbox();
+export const lightbox = (typeof globalThis !== 'undefined' && globalThis[GLOBAL_KEY])
+  ? globalThis[GLOBAL_KEY]
+  : new Lightbox();
