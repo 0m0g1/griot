@@ -4,11 +4,14 @@
 //
 // Usage:
 //   import { renderGallery } from './GalleryRenderer.js';
-//   const el = renderGallery(items, 'carousel');
+//   const el = renderGallery(items, 'carousel');               // loops by default
+//   const el = renderGallery(items, 'carousel', { loop: false }); // no loop
 //   container.appendChild(el);
 //
 // items shape: { src?, url?, alt?, alt_text?, caption? }[]
 // layouts: 'grid' | 'masonry' | 'carousel' | 'strip'
+// options:
+//   loop  boolean  (carousel only) whether prev/next wraps around. default: true
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { lightbox } from './Lightbox.js';
@@ -21,12 +24,15 @@ const VALID_LAYOUTS = new Set(['grid', 'masonry', 'carousel', 'strip']);
  * Render a gallery element.
  * @param {object[]} items
  * @param {'grid'|'masonry'|'carousel'|'strip'} layout
+ * @param {{ loop?: boolean }} [options]
  * @returns {HTMLElement}
  */
-export function renderGallery(items = [], layout = 'grid') {
+export function renderGallery(items = [], layout = 'grid', options = {}) {
   _injectStyles();
 
   const l    = VALID_LAYOUTS.has(layout) ? layout : 'grid';
+  const opts = { loop: true, ...options };
+
   const wrap = document.createElement('div');
   wrap.className      = `griot-gallery griot-gallery--${l}`;
   wrap.dataset.layout = l;
@@ -40,7 +46,7 @@ export function renderGallery(items = [], layout = 'grid') {
   }
 
   switch (l) {
-    case 'carousel': return _carousel(items, wrap);
+    case 'carousel': return _carousel(items, wrap, opts);
     case 'masonry':  return _masonry(items, wrap);
     case 'strip':    return _strip(items, wrap);
     default:         return _grid(items, wrap);
@@ -113,15 +119,9 @@ function _itemEl(item, index, allItems) {
 
 // ── Carousel ──────────────────────────────────────────────────────────────────
 
-function _carousel(items, wrap) {
+function _carousel(items, wrap, opts) {
+  const loop = opts.loop !== false; // default true
   let idx = 0;
-
-  // ── DOM structure ────────────────────────────────────────────────────────
-  //  .griot-carousel__viewport  (clips)
-  //    .griot-carousel__track   (slides)
-  //      .griot-carousel__slide × N
-  //  .griot-carousel__controls  (prev · counter · next)
-  //  .griot-carousel__dots      (dot buttons, hidden if > 12 items)
 
   const viewport = document.createElement('div');
   viewport.className = 'griot-carousel__viewport';
@@ -140,8 +140,6 @@ function _carousel(items, wrap) {
     img.decoding = 'async';
     img.draggable = false;
 
-    // Click on carousel image → open lightbox at CURRENT idx (not i, since user
-    // may have navigated away from the first image)
     img.addEventListener('click', () => lightbox.open(items, idx));
 
     slide.appendChild(img);
@@ -185,8 +183,17 @@ function _carousel(items, wrap) {
 
   // ── Navigation logic ──────────────────────────────────────────────────────
 
+  function canGoPrev() { return loop || idx > 0; }
+  function canGoNext() { return loop || idx < items.length - 1; }
+
   function goTo(n, animate = true) {
-    idx = Math.max(0, Math.min(n, items.length - 1));
+    if (loop) {
+      // wrap around in both directions
+      idx = ((n % items.length) + items.length) % items.length;
+    } else {
+      // clamp to valid range
+      idx = Math.max(0, Math.min(n, items.length - 1));
+    }
 
     if (!animate) {
       track.style.transition = 'none';
@@ -196,10 +203,13 @@ function _carousel(items, wrap) {
     track.style.transform = `translateX(-${idx * 100}%)`;
     counter.textContent   = `${idx + 1} / ${items.length}`;
 
-    prevBtn.disabled = items.length <= 1;
-    nextBtn.disabled = items.length <= 1;
-    prevBtn.classList.toggle('is-edge', idx === 0);
-    nextBtn.classList.toggle('is-edge', idx === items.length - 1);
+    // In loop mode buttons are always enabled (single-item galleries still hide them)
+    prevBtn.disabled = items.length <= 1 || (!loop && idx === 0);
+    nextBtn.disabled = items.length <= 1 || (!loop && idx === items.length - 1);
+
+    // edge class only meaningful when not looping
+    prevBtn.classList.toggle('is-edge', !loop && idx === 0);
+    nextBtn.classList.toggle('is-edge', !loop && idx === items.length - 1);
 
     dotEls.forEach((d, i) => {
       d.classList.toggle('is-active', i === idx);
@@ -207,10 +217,10 @@ function _carousel(items, wrap) {
     });
   }
 
-  prevBtn.addEventListener('click', () => goTo(idx - 1));
-  nextBtn.addEventListener('click', () => goTo(idx + 1));
+  prevBtn.addEventListener('click', () => { if (canGoPrev()) goTo(idx - 1); });
+  nextBtn.addEventListener('click', () => { if (canGoNext()) goTo(idx + 1); });
 
-  // Touch / swipe on the viewport
+  // Touch / swipe
   let touchX = 0, touchY = 0, isScrolling = null;
 
   viewport.addEventListener('touchstart', e => {
@@ -230,14 +240,18 @@ function _carousel(items, wrap) {
   viewport.addEventListener('touchend', e => {
     if (isScrolling) return;
     const dx = e.changedTouches[0].clientX - touchX;
-    if (Math.abs(dx) > 40) goTo(dx < 0 ? idx + 1 : idx - 1);
+    if (Math.abs(dx) > 40) {
+      const dir = dx < 0 ? 1 : -1;
+      if (dir === -1 && canGoPrev()) goTo(idx - 1);
+      if (dir ===  1 && canGoNext()) goTo(idx + 1);
+    }
   }, { passive: true });
 
   // Keyboard when carousel has focus
   wrap.tabIndex = 0;
   wrap.addEventListener('keydown', e => {
-    if (e.key === 'ArrowLeft')  { e.preventDefault(); goTo(idx - 1); }
-    if (e.key === 'ArrowRight') { e.preventDefault(); goTo(idx + 1); }
+    if (e.key === 'ArrowLeft'  && canGoPrev()) { e.preventDefault(); goTo(idx - 1); }
+    if (e.key === 'ArrowRight' && canGoNext()) { e.preventDefault(); goTo(idx + 1); }
   });
 
   // Accessibility
@@ -250,7 +264,7 @@ function _carousel(items, wrap) {
 
   wrap.append(viewport, controls, dots);
 
-  goTo(0, false); // initial position, no animation
+  goTo(0, false);
   return wrap;
 }
 
