@@ -45,6 +45,18 @@ function _toNode(t, opts) {
       el.textContent = t.text;
       return el;
     }
+    case TOKEN.SUPER: {
+      const el = document.createElement('sup');
+      el.className = 'griot-sup';
+      el.textContent = t.text;
+      return el;
+    }
+    case TOKEN.SUB: {
+      const el = document.createElement('sub');
+      el.className = 'griot-sub';
+      el.textContent = t.text;
+      return el;
+    }
     case TOKEN.HIGHLIGHT: {
       const el = document.createElement('mark');
       el.className = 'griot-highlight';
@@ -119,6 +131,8 @@ function _toHTML(t) {
     case TOKEN.ITALIC:     return `<em>${escHtml(t.text)}</em>`;
     case TOKEN.UNDERLINE:  return `<u class="griot-underline">${escHtml(t.text)}</u>`;
     case TOKEN.STRIKE:     return `<s class="griot-strike">${escHtml(t.text)}</s>`;
+    case TOKEN.SUPER:      return `<sup class="griot-sup">${escHtml(t.text)}</sup>`;
+    case TOKEN.SUB:        return `<sub class="griot-sub">${escHtml(t.text)}</sub>`;
     case TOKEN.HIGHLIGHT:  return `<mark class="griot-highlight">${escHtml(t.text)}</mark>`;
     case TOKEN.COLOR_MARK: return `<span class="griot-color-mark" style="color:${escAttr(t.color)}">${escHtml(t.text)}</span>`;
     case TOKEN.CODE:       return `<code class="griot-inline-code">${escHtml(t.code)}</code>`;

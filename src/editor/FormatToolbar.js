@@ -17,6 +17,8 @@ const FORMATS = [
   { key: 'italic',    label: 'I',  title: 'Italic (Ctrl+I)',    syntax: '*'   },
   { key: 'underline', label: 'U',  title: 'Underline (Ctrl+U)', syntax: '__'  },
   { key: 'strike',    label: 'S̶',  title: 'Strikethrough',      syntax: '~~'  },
+  { key: 'sup',       label: 'x²', title: 'Superscript',        syntax: '^'   },
+  { key: 'sub',       label: 'x₂', title: 'Subscript',          syntax: '~'   },
   { key: 'code',      label: '`',  title: 'Inline Code',        syntax: '`'   },
   { key: 'highlight', label: '▐',  title: 'Highlight',          syntax: '=='  },
   { key: 'link',      label: '🔗', title: 'Link',               action: 'link'  },

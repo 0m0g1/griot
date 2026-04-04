@@ -7,6 +7,8 @@
 //   *italic*                           → TOKEN.ITALIC      { text }
 //   __underline__                      → TOKEN.UNDERLINE   { text }
 //   ~~strikethrough~~                  → TOKEN.STRIKE      { text }
+//   ^superscript^                      → TOKEN.SUPER       { text }
+//   ~subscript~                        → TOKEN.SUB         { text }
 //   `inline code`                      → TOKEN.CODE        { code }
 //   ==highlight==                      → TOKEN.HIGHLIGHT   { text }
 //   {#f00:red text}  {blue:text}       → TOKEN.COLOR_MARK  { color, text }
@@ -25,6 +27,8 @@ export const TOKEN = Object.freeze({
   ITALIC:     'italic',
   UNDERLINE:  'underline',
   STRIKE:     'strike',
+  SUPER:      'super',
+  SUB:        'sub',
   CODE:       'code',
   LINK:       'link',
   IMAGE:      'image',
@@ -45,8 +49,12 @@ const RULES = [
   { type: TOKEN.ITALIC,     re: /^\*((?:[^*])+)\*/,                                 build: m => ({ text: m[1] }) },
   // Underline __text__
   { type: TOKEN.UNDERLINE,  re: /^__((?:[^_])+)__/,                                 build: m => ({ text: m[1] }) },
-  // Strikethrough ~~text~~
+  // Strikethrough ~~text~~ (must come before single ~ subscript)
   { type: TOKEN.STRIKE,     re: /^~~((?:[^~])+)~~/,                                 build: m => ({ text: m[1] }) },
+  // Subscript ~text~
+  { type: TOKEN.SUB,        re: /^~((?:[^~])+)~/,                                   build: m => ({ text: m[1] }) },
+  // Superscript ^text^
+  { type: TOKEN.SUPER,      re: /^\^((?:[^^])+)\^/,                                 build: m => ({ text: m[1] }) },
   // Highlight ==text==
   { type: TOKEN.HIGHLIGHT,  re: /^==((?:[^=])+)==/,                                 build: m => ({ text: m[1] }) },
   // Colour mark {#hex:text} or {colorname:text}
