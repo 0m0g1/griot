@@ -29,6 +29,7 @@ const SCHEMA = {
 
   timeline_ref:    { category:'structure', label:'Timeline Event', icon:'⏱',  slashLabel:'Timeline event', hasText:false, hasInline:false, defaultMeta:{ eventId:'', eventTitle:'', note:'' },                    placeholder:null },
   book_citation:   { category:'structure', label:'Book Citation',  icon:'📖',  slashLabel:'Book citation',  hasText:false, hasInline:false, defaultMeta:{ bookId:'', unitId:'', quote:'', note:'' },               placeholder:null },
+  quiz:            { category:'interactive', label:'Quiz',          icon:'✓',   slashLabel:'Quiz',           hasText:false, hasInline:false, defaultMeta:{ title:'', questions:[] },                         placeholder:null },
 };
 
 export function getBlockDef(type)        { return SCHEMA[type] ?? SCHEMA.paragraph; }

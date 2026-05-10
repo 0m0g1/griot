@@ -298,6 +298,9 @@ function _render(block, opts) {
       return _renderCitation(block, opts);
     }
 
+    case 'quiz':
+      return _renderQuiz(block, opts);
+
     default: {
       const el = document.createElement('p');
       el.className = 'griot-block griot-paragraph';
@@ -339,6 +342,280 @@ function _renderCitation(block, opts) {
   }
   wrap.appendChild(inner);
   return wrap;
+}
+
+// ─── Quiz renderer ────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/[&<>]/g, function(m) {
+    if (m === '&') return '&amp;';
+    if (m === '<') return '&lt;';
+    if (m === '>') return '&gt;';
+    return m;
+  });
+}
+
+function _renderQuiz(block, opts) {
+  const { meta = {} } = block;
+  const title = meta.title || '';
+  const questions = Array.isArray(meta.questions) ? meta.questions : [];
+
+  const container = document.createElement('div');
+  container.className = 'griot-block griot-quiz';
+
+  if (title) {
+    const titleEl = document.createElement('h4');
+    titleEl.className = 'griot-quiz__title';
+    titleEl.textContent = title;
+    container.appendChild(titleEl);
+  }
+
+  if (questions.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'griot-quiz__empty';
+    empty.textContent = 'No questions yet.';
+    container.appendChild(empty);
+    return container;
+  }
+
+  const form = document.createElement('form');
+  form.className = 'griot-quiz__form';
+
+  questions.forEach((q, idx) => {
+    const qid = q.id || `q${idx}`;
+    const text = q.text || `Question ${idx + 1}`;
+    const options = Array.isArray(q.options) ? q.options : [];
+    const correctIdx = q.correctOption;
+    const explanation = q.explanation || '';
+
+    const fieldset = document.createElement('fieldset');
+    fieldset.className = 'griot-quiz__question';
+    fieldset.dataset.index = idx;
+
+    const legend = document.createElement('legend');
+    legend.className = 'griot-quiz__question-text';
+    legend.innerHTML = `<span class="griot-quiz__q-num">${idx + 1}.</span> ${escapeHtml(text)}`;
+    fieldset.appendChild(legend);
+
+    const optionsContainer = document.createElement('div');
+    optionsContainer.className = 'griot-quiz__options';
+
+    options.forEach((opt, optIdx) => {
+      const label = document.createElement('label');
+      label.className = 'griot-quiz__option';
+
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = `quiz_${block.id}_${qid}`;
+      radio.value = optIdx;
+
+      const span = document.createElement('span');
+      span.textContent = `${String.fromCharCode(65 + optIdx)}. ${escapeHtml(opt)}`;
+
+      label.appendChild(radio);
+      label.appendChild(span);
+      optionsContainer.appendChild(label);
+    });
+
+    fieldset.appendChild(optionsContainer);
+
+    const feedback = document.createElement('div');
+    feedback.className = 'griot-quiz__feedback';
+    fieldset.appendChild(feedback);
+
+    form.appendChild(fieldset);
+  });
+
+  const submitBtn = document.createElement('button');
+  submitBtn.type = 'button';
+  submitBtn.className = 'griot-quiz__submit';
+  submitBtn.textContent = 'Check answers';
+  submitBtn.addEventListener('click', () => {
+    let score = 0;
+    const answers = {};
+    questions.forEach((q, idx) => {
+      const qid = q.id || `q${idx}`;
+      const radios = form.querySelectorAll(`input[name="quiz_${block.id}_${qid}"]`);
+      let selected = null;
+      radios.forEach((r, i) => { if (r.checked) selected = i; });
+      answers[qid] = selected;
+      const isCorrect = (selected !== null && selected === q.correctOption);
+      if (isCorrect) score++;
+
+      const feedbackDiv = form.querySelector(`fieldset[data-index="${idx}"] .griot-quiz__feedback`);
+      if (feedbackDiv) {
+        if (selected === null) {
+          feedbackDiv.textContent = '❓ No answer selected.';
+          feedbackDiv.className = 'griot-quiz__feedback griot-quiz__feedback--missing';
+        } else if (isCorrect) {
+          feedbackDiv.textContent = '✓ Correct!';
+          feedbackDiv.className = 'griot-quiz__feedback griot-quiz__feedback--correct';
+        } else {
+          const correctAnswerText = q.options[q.correctOption];
+          feedbackDiv.innerHTML = `✗ Incorrect. Correct answer: ${escapeHtml(correctAnswerText)}. ${escapeHtml(q.explanation || '')}`;
+          feedbackDiv.className = 'griot-quiz__feedback griot-quiz__feedback--wrong';
+        }
+      }
+    });
+    const totalScore = questions.length;
+
+    const existingScore = container.querySelector('.griot-quiz__score');
+    if (existingScore) existingScore.remove();
+    const scoreDiv = document.createElement('div');
+    scoreDiv.className = 'griot-quiz__score';
+    scoreDiv.textContent = `You scored ${score} out of ${totalScore}.`;
+    container.appendChild(scoreDiv);
+
+    if (typeof opts.onQuizSubmit === 'function') {
+      opts.onQuizSubmit(block.id, score, totalScore, answers);
+    }
+  });
+
+  form.appendChild(submitBtn);
+  container.appendChild(form);
+  return container;
+}
+
+function _renderQuiz(block, opts) {
+  const { meta = {} } = block;
+  const title = meta.title || '';
+  const questions = Array.isArray(meta.questions) ? meta.questions : [];
+  const answers = meta._submittedAnswers || {};   // optional: store last answers
+
+  const container = document.createElement('div');
+  container.className = 'griot-block griot-quiz';
+
+  if (title) {
+    const titleEl = document.createElement('h4');
+    titleEl.className = 'griot-quiz__title';
+    titleEl.textContent = title;
+    container.appendChild(titleEl);
+  }
+
+  if (questions.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'griot-quiz__empty';
+    empty.textContent = 'No questions yet.';
+    container.appendChild(empty);
+    return container;
+  }
+
+  const form = document.createElement('form');
+  form.className = 'griot-quiz__form';
+
+  let totalScore = 0;
+  let userScore = 0;
+
+  questions.forEach((q, idx) => {
+    const qid = q.id || `q${idx}`;
+    const text = q.text || `Question ${idx + 1}`;
+    const options = Array.isArray(q.options) ? q.options : [];
+    const correctIdx = q.correctOption; // 0‑based index
+    const explanation = q.explanation || '';
+    const userChoice = answers[qid] !== undefined ? answers[qid] : null;
+
+    const fieldset = document.createElement('fieldset');
+    fieldset.className = 'griot-quiz__question';
+    fieldset.dataset.index = idx;
+
+    const legend = document.createElement('legend');
+    legend.className = 'griot-quiz__question-text';
+    legend.innerHTML = `<span class="griot-quiz__q-num">${idx + 1}.</span> ${escapeHtml(text)}`;
+    fieldset.appendChild(legend);
+
+    const optionsContainer = document.createElement('div');
+    optionsContainer.className = 'griot-quiz__options';
+
+    options.forEach((opt, optIdx) => {
+      const label = document.createElement('label');
+      label.className = 'griot-quiz__option';
+
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = `quiz_${block.id}_${qid}`;
+      radio.value = optIdx;
+      if (userChoice === optIdx) radio.checked = true;
+      radio.addEventListener('change', () => {
+        // Update stored answers in meta (optional – allows preserving after submit)
+        const newAnswers = { ...(block.meta._submittedAnswers || {}), [qid]: optIdx };
+        // We'll trigger an external callback later – for now just store in meta
+        // But meta updates must go through the editor, not viewer. So we only calculate on‑the‑fly.
+        // Instead, we call a user callback when the quiz is submitted.
+      });
+
+      const span = document.createElement('span');
+      span.textContent = `${String.fromCharCode(65 + optIdx)}. ${escapeHtml(opt)}`;
+
+      label.appendChild(radio);
+      label.appendChild(span);
+      optionsContainer.appendChild(label);
+    });
+
+    fieldset.appendChild(optionsContainer);
+
+    // Show correct / wrong feedback after evaluation
+    const feedback = document.createElement('div');
+    feedback.className = 'griot-quiz__feedback';
+    fieldset.appendChild(feedback);
+
+    form.appendChild(fieldset);
+  });
+
+  const submitBtn = document.createElement('button');
+  submitBtn.type = 'button';
+  submitBtn.className = 'griot-quiz__submit';
+  submitBtn.textContent = 'Check answers';
+  submitBtn.addEventListener('click', () => {
+    let score = 0;
+    const newAnswers = {};
+    questions.forEach((q, idx) => {
+      const qid = q.id || `q${idx}`;
+      const radios = form.querySelectorAll(`input[name="quiz_${block.id}_${qid}"]`);
+      let selected = null;
+      radios.forEach((r, i) => { if (r.checked) selected = i; });
+      newAnswers[qid] = selected;
+      const isCorrect = (selected !== null && selected === q.correctOption);
+      if (isCorrect) score++;
+
+      // Show feedback per question
+      const feedbackDiv = form.querySelector(`fieldset[data-index="${idx}"] .griot-quiz__feedback`);
+      if (feedbackDiv) {
+        if (selected === null) {
+          feedbackDiv.textContent = '❓ No answer selected.';
+          feedbackDiv.className = 'griot-quiz__feedback griot-quiz__feedback--missing';
+        } else if (isCorrect) {
+          feedbackDiv.textContent = '✓ Correct!';
+          feedbackDiv.className = 'griot-quiz__feedback griot-quiz__feedback--correct';
+        } else {
+          const correctAnswerText = q.options[q.correctOption];
+          feedbackDiv.innerHTML = `✗ Incorrect. Correct answer: ${escapeHtml(correctAnswerText)}. ${escapeHtml(q.explanation || '')}`;
+          feedbackDiv.className = 'griot-quiz__feedback griot-quiz__feedback--wrong';
+        }
+        if (q.explanation && selected !== null && !isCorrect) {
+          // Already added above
+        }
+      }
+    });
+    totalScore = questions.length;
+    userScore = score;
+
+    // Display overall score
+    const existingScore = container.querySelector('.griot-quiz__score');
+    if (existingScore) existingScore.remove();
+    const scoreDiv = document.createElement('div');
+    scoreDiv.className = 'griot-quiz__score';
+    scoreDiv.textContent = `You scored ${score} out of ${totalScore}.`;
+    container.appendChild(scoreDiv);
+
+    // Fire user callback if provided
+    if (typeof opts.onQuizSubmit === 'function') {
+      opts.onQuizSubmit(block.id, score, totalScore, newAnswers);
+    }
+  });
+
+  form.appendChild(submitBtn);
+  container.appendChild(form);
+  return container;
 }
 
 // ─── Embed URL helpers ────────────────────────────────────────────────────────

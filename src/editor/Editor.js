@@ -649,6 +649,10 @@ export class Editor {
         wrap.appendChild(this._metaTextarea(block, 'note', 'Commentary (inline syntax ok)…', { rows: 2 }));
         break;
       }
+
+      case 'quiz':
+        wrap.appendChild(this._buildQuizEditor(block));
+        break;
     }
 
     return wrap;
@@ -756,6 +760,151 @@ export class Editor {
 
     table.appendChild(tbody);
     container.appendChild(table);
+    return container;
+  }
+
+  _buildQuizEditor(block) {
+    const container = document.createElement('div');
+    container.className = 'griot-editor-quiz';
+
+    // Title
+    const titleRow = document.createElement('div');
+    titleRow.className = 'griot-editor-quiz__title-row';
+    const titleLabel = document.createElement('label');
+    titleLabel.textContent = 'Quiz title:';
+    const titleInput = this._metaInput(block, 'title', 'Optional quiz title', { style: 'flex:1' });
+    titleRow.append(titleLabel, titleInput);
+    container.appendChild(titleRow);
+
+    const questionsContainer = document.createElement('div');
+    questionsContainer.className = 'griot-editor-quiz__questions';
+    container.appendChild(questionsContainer);
+
+    const refreshQuestions = () => {
+      questionsContainer.innerHTML = '';
+      const questions = Array.isArray(block.meta?.questions) ? block.meta.questions : [];
+
+      questions.forEach((q, qIdx) => {
+        const qCard = document.createElement('div');
+        qCard.className = 'griot-editor-quiz__question-card';
+
+        const header = document.createElement('div');
+        header.className = 'griot-editor-quiz__q-header';
+        const qNum = document.createElement('span');
+        qNum.className = 'griot-editor-quiz__q-num';
+        qNum.textContent = `Question ${qIdx + 1}`;
+        const removeBtn = this._mkSmallBtn('×', 'Remove question', () => {
+          const newQuestions = [...questions];
+          newQuestions.splice(qIdx, 1);
+          this._commit(updateBlock(this._doc, block.id, { meta: { ...block.meta, questions: newQuestions } }));
+        }, 'is-del');
+        header.append(qNum, removeBtn);
+
+        const qTextInput = document.createElement('input');
+        qTextInput.type = 'text';
+        qTextInput.className = 'griot-editor-block__meta-input';
+        qTextInput.placeholder = 'Question text...';
+        qTextInput.value = q.text || '';
+        qTextInput.addEventListener('input', () => {
+          const updated = [...questions];
+          updated[qIdx] = { ...updated[qIdx], text: qTextInput.value };
+          this._commit(updateBlock(this._doc, block.id, { meta: { ...block.meta, questions: updated } }));
+        });
+
+        const optionsContainer = document.createElement('div');
+        optionsContainer.className = 'griot-editor-quiz__options';
+
+        const refreshOptions = () => {
+          optionsContainer.innerHTML = '';
+          const opts = q.options || [];
+
+          opts.forEach((opt, optIdx) => {
+            const optRow = document.createElement('div');
+            optRow.className = 'griot-editor-quiz__opt-row';
+
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = `quiz_correct_${block.id}_${qIdx}`;
+            radio.checked = (q.correctOption === optIdx);
+            radio.addEventListener('change', () => {
+              const updated = [...questions];
+              updated[qIdx] = { ...updated[qIdx], correctOption: optIdx };
+              this._commit(updateBlock(this._doc, block.id, { meta: { ...block.meta, questions: updated } }));
+            });
+
+            const optInput = document.createElement('input');
+            optInput.type = 'text';
+            optInput.className = 'griot-editor-block__meta-input';
+            optInput.placeholder = `Option ${String.fromCharCode(65 + optIdx)}`;
+            optInput.value = opt;
+            optInput.addEventListener('input', () => {
+              const updated = [...questions];
+              const newOpts = [...(updated[qIdx].options || [])];
+              newOpts[optIdx] = optInput.value;
+              updated[qIdx] = { ...updated[qIdx], options: newOpts };
+              this._commit(updateBlock(this._doc, block.id, { meta: { ...block.meta, questions: updated } }));
+            });
+
+            const delOptBtn = this._mkSmallBtn('×', 'Remove option', () => {
+              if (opts.length <= 1) return;
+              const updated = [...questions];
+              const newOpts = opts.filter((_, i) => i !== optIdx);
+              let newCorrect = q.correctOption;
+              if (newCorrect === optIdx) newCorrect = 0;
+              else if (newCorrect > optIdx) newCorrect--;
+              updated[qIdx] = { ...updated[qIdx], options: newOpts, correctOption: newCorrect };
+              this._commit(updateBlock(this._doc, block.id, { meta: { ...block.meta, questions: updated } }));
+            }, 'is-del');
+
+            optRow.append(radio, optInput, delOptBtn);
+            optionsContainer.appendChild(optRow);
+          });
+
+          const addOptBtn = this._mkSmallBtn('+ Add option', 'Add option', () => {
+            const updated = [...questions];
+            const newOpts = [...(updated[qIdx].options || []), `Option ${(updated[qIdx].options?.length || 0) + 1}`];
+            updated[qIdx] = { ...updated[qIdx], options: newOpts };
+            this._commit(updateBlock(this._doc, block.id, { meta: { ...block.meta, questions: updated } }));
+          });
+          optionsContainer.appendChild(addOptBtn);
+        };
+
+        refreshOptions();
+
+        const explanationInput = document.createElement('textarea');
+        explanationInput.className = 'griot-editor-block__meta-input griot-editor-block__meta-textarea';
+        explanationInput.rows = 2;
+        explanationInput.placeholder = 'Explanation (shown after answering)';
+        explanationInput.value = q.explanation || '';
+        explanationInput.addEventListener('input', () => {
+          const updated = [...questions];
+          updated[qIdx] = { ...updated[qIdx], explanation: explanationInput.value };
+          this._commit(updateBlock(this._doc, block.id, { meta: { ...block.meta, questions: updated } }));
+        });
+
+        qCard.append(header, qTextInput, optionsContainer, explanationInput);
+        questionsContainer.appendChild(qCard);
+      });
+
+      const addQBtn = document.createElement('button');
+      addQBtn.type = 'button';
+      addQBtn.className = 'griot-editor-block__pick-btn';
+      addQBtn.textContent = '+ Add question';
+      addQBtn.addEventListener('click', () => {
+        const newQuestion = {
+          id: Date.now() + Math.random(),
+          text: 'New question',
+          options: ['Option A', 'Option B'],
+          correctOption: 0,
+          explanation: '',
+        };
+        const updated = [...(block.meta?.questions || []), newQuestion];
+        this._commit(updateBlock(this._doc, block.id, { meta: { ...block.meta, questions: updated } }));
+      });
+      questionsContainer.appendChild(addQBtn);
+    };
+
+    refreshQuestions();
     return container;
   }
 
@@ -1175,6 +1324,60 @@ function _injectEditorStyles() {
 .griot-editor-checklist__row { display:flex; align-items:center; gap:6px; }
 .griot-editor-checklist__cb { flex-shrink:0; width:15px; height:15px; accent-color:#6366f1; cursor:pointer; }
 .griot-editor-checklist__text { flex:1; }
+
+/* ── Quiz editor ────────────────────────────────────────────────────────── */
+.griot-editor-quiz {
+  background: rgba(0,0,0,0.2);
+  border-radius: var(--griot-radius);
+  padding: 10px;
+}
+.griot-editor-quiz__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+.griot-editor-quiz__title-row label {
+  font-size: 12px;
+  color: var(--griot-text-muted);
+}
+.griot-editor-quiz__question-card {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--griot-border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+.griot-editor-quiz__q-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.griot-editor-quiz__q-num {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--griot-accent);
+}
+.griot-editor-quiz__options {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+.griot-editor-quiz__opt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.griot-editor-quiz__opt-row input[type="radio"] {
+  accent-color: var(--griot-accent);
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.griot-editor-quiz__opt-row .griot-editor-block__meta-input {
+  flex: 1;
+}
   `;
   document.head.appendChild(s);
 }

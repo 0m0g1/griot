@@ -351,3 +351,70 @@
   margin-bottom: 7px;
   font-weight: 600;
 }
+
+/* ── Quiz viewer ─────────────────────────────────────────────────────────── */
+.griot-quiz {
+  background: rgba(99,102,241,0.03);
+  border: 1px solid var(--griot-border);
+  border-radius: var(--griot-radius);
+  padding: 16px;
+  margin: 20px 0;
+}
+.griot-quiz__title {
+  margin: 0 0 12px 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--griot-accent-text);
+}
+.griot-quiz__question {
+  border: none;
+  margin: 0 0 20px 0;
+  padding: 0;
+}
+.griot-quiz__question-text {
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--griot-text);
+}
+.griot-quiz__options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.griot-quiz__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+.griot-quiz__option input {
+  margin: 0;
+  accent-color: var(--griot-accent);
+}
+.griot-quiz__feedback {
+  font-size: 0.85rem;
+  padding: 5px 0;
+}
+.griot-quiz__feedback--correct { color: #86efac; }
+.griot-quiz__feedback--wrong   { color: #f87171; }
+.griot-quiz__feedback--missing { color: var(--griot-text-muted); }
+.griot-quiz__submit {
+  background: var(--griot-accent);
+  border: none;
+  border-radius: var(--griot-radius-sm);
+  color: white;
+  padding: 6px 16px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.griot-quiz__submit:hover { background: #7c3aed; }
+.griot-quiz__score {
+  margin-top: 16px;
+  font-weight: 500;
+  text-align: right;
+  border-top: 1px solid var(--griot-border);
+  padding-top: 12px;
+}
