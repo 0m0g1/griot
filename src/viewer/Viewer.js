@@ -44,6 +44,10 @@ export class Viewer {
     this._render();
   }
 
+  setOnQuizSubmit(fn) {
+    this._options.onQuizSubmit = fn ?? null;
+  }
+
   /** Scroll to block and briefly highlight it */
   setHighlight(blockId, { scroll = true, behavior = 'smooth' } = {}) {
     clearTimeout(this._hlTimer);
@@ -119,6 +123,7 @@ export class Viewer {
       books:        this._books,
       onEventClick: this._options.onEventClick,
       onCiteClick:  this._options.onCiteClick,
+      onQuizSubmit: this._options.onQuizSubmit,  // ← add this
     };
 
     for (const block of this._doc.blocks) {
