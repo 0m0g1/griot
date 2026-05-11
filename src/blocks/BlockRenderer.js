@@ -432,42 +432,67 @@ function _renderQuiz(block, opts) {
   submitBtn.textContent = 'Check answers';
   submitBtn.addEventListener('click', () => {
     let score = 0;
+    let answered = 0;
     const answers = {};
+
     questions.forEach((q, idx) => {
       const qid = q.id || `q${idx}`;
       const radios = form.querySelectorAll(`input[name="quiz_${block.id}_${qid}"]`);
       let selected = null;
       radios.forEach((r, i) => { if (r.checked) selected = i; });
-      answers[qid] = selected;
-      const isCorrect = (selected !== null && selected === q.correctOption);
-      if (isCorrect) score++;
 
-      const feedbackDiv = form.querySelector(`fieldset[data-index="${idx}"] .griot-quiz__feedback`);
-      if (feedbackDiv) {
-        if (selected === null) {
-          feedbackDiv.textContent = '❓ No answer selected.';
+      // Only count attempted questions
+      if (selected !== null) {
+        answered++;
+        answers[qid] = selected;
+        const isCorrect = selected === q.correctOption;
+        if (isCorrect) score++;
+
+        const feedbackDiv = form.querySelector(`fieldset[data-index="${idx}"] .griot-quiz__feedback`);
+        if (feedbackDiv) {
+          if (isCorrect) {
+            feedbackDiv.textContent = '✓ Correct!';
+            feedbackDiv.className = 'griot-quiz__feedback griot-quiz__feedback--correct';
+          } else {
+            const correctAnswerText = q.options[q.correctOption];
+            feedbackDiv.innerHTML = `✗ Incorrect. Correct answer: ${escapeHtml(correctAnswerText)}. ${escapeHtml(q.explanation || '')}`;
+            feedbackDiv.className = 'griot-quiz__feedback griot-quiz__feedback--wrong';
+          }
+        }
+      } else {
+        // Unanswered — show skipped, don't penalise
+        const feedbackDiv = form.querySelector(`fieldset[data-index="${idx}"] .griot-quiz__feedback`);
+        if (feedbackDiv) {
+          feedbackDiv.textContent = '— Skipped';
           feedbackDiv.className = 'griot-quiz__feedback griot-quiz__feedback--missing';
-        } else if (isCorrect) {
-          feedbackDiv.textContent = '✓ Correct!';
-          feedbackDiv.className = 'griot-quiz__feedback griot-quiz__feedback--correct';
-        } else {
-          const correctAnswerText = q.options[q.correctOption];
-          feedbackDiv.innerHTML = `✗ Incorrect. Correct answer: ${escapeHtml(correctAnswerText)}. ${escapeHtml(q.explanation || '')}`;
-          feedbackDiv.className = 'griot-quiz__feedback griot-quiz__feedback--wrong';
         }
       }
     });
-    const totalScore = questions.length;
 
+    if (answered === 0) {
+      alert('Please answer at least one question.');
+      return;
+    }
+
+    // Lock the form — prevent resubmit
+    form.querySelectorAll('input[type="radio"]').forEach(r => r.disabled = true);
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitted';
+    submitBtn.style.opacity = '0.5';
+    submitBtn.style.cursor = 'default';
+
+    // Show score
     const existingScore = container.querySelector('.griot-quiz__score');
     if (existingScore) existingScore.remove();
     const scoreDiv = document.createElement('div');
     scoreDiv.className = 'griot-quiz__score';
-    scoreDiv.textContent = `You scored ${score} out of ${totalScore}.`;
+    scoreDiv.textContent = answered < questions.length
+      ? `You scored ${score} out of ${answered} answered (${questions.length - answered} skipped).`
+      : `You scored ${score} out of ${answered}.`;
     container.appendChild(scoreDiv);
 
     if (typeof opts.onQuizSubmit === 'function') {
-      opts.onQuizSubmit(block.id, score, totalScore, answers);
+      opts.onQuizSubmit(block.id, score, answered, answers);
     }
   });
 
